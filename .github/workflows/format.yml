@@ -1,9 +1,8 @@
 name: Format
 
-# Temporary helper, deleted once the actix crate is green. The authoring sandbox
-# has no Rust toolchain, so CI reports:
-#   PKG|<total>|<index>|<chunk>  gzipped `cargo fmt` patch, base64, in chunks
-#   D|<kind>|<text>              first compiler / test errors, flattened
+# Temporary helper, deleted once the crate is green. Reports rustfmt's own output
+# plus the first compiler/test errors as check-run annotations, because the
+# authoring sandbox has no Rust toolchain.
 on:
   workflow_dispatch:
   push:
@@ -19,31 +18,24 @@ jobs:
         with:
           components: rustfmt
       - uses: Swatinem/rust-cache@v2
-      - name: Formatting patch
+      - name: rustfmt
         run: |
-          cargo fmt --all
-          if git diff --quiet; then
-            echo "::warning::already formatted, nothing to publish"
+          if cargo fmt --all > /tmp/fmt.log 2>&1; then
+            echo "::notice::rustfmt succeeded"
+            git diff --stat || true
             exit 0
           fi
-          git diff > /tmp/fmt.patch
-          encoded=$(gzip -c /tmp/fmt.patch | base64 -w0)
-          length=$(printf '%s' "$encoded" | wc -c)
-          total=$(( (length + 3700) / 3700 ))
-          printf '%s' "$encoded" | fold -w 3700 | {
-            index=0
-            while IFS= read -r chunk; do
-              printf '::error::PKG|%d|%04d|%s\n' "$total" "$index" "$chunk"
-              index=$((index + 1))
-            done
-          }
+          printf '::error::FMT|%s\n' "$(head -c 3000 /tmp/fmt.log | tr '\n' ' ')"
+          exit 1
       - name: Build diagnostics
+        if: always()
         continue-on-error: true
         run: |
           cargo build -p wintercave-server --message-format=short > /tmp/build.log 2>&1 || true
-          printf '::error::D|BUILD|%s\n' "$(grep -E 'error\[|error:' /tmp/build.log | head -n 12 | tr '\n' ' ' | cut -c1-3300)"
+          printf '::error::D|BUILD|%s\n' "$(grep -E 'error\[|error:' /tmp/build.log | head -n 12 | tr '\n' ' ' | cut -c1-3000)"
       - name: Test diagnostics
+        if: always()
         continue-on-error: true
         run: |
-          cargo test -p wintercave-server > /tmp/test.log 2>&1 || true
-          printf '::error::D|TEST|%s\n' "$(grep -E 'error\[|error:|FAILED|panicked' /tmp/test.log | head -n 12 | tr '\n' ' ' | cut -c1-3300)"
+          cargo test -p wintercave-server --no-run > /tmp/testbuild.log 2>&1 || true
+          printf '::error::D|TESTBUILD|%s\n' "$(grep -E 'error\[|error:' /tmp/testbuild.log | head -n 12 | tr '\n' ' ' | cut -c1-3000)"

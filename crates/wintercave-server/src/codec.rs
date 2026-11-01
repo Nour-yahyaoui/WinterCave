@@ -47,10 +47,11 @@ pub fn parse_form(body: &[u8]) -> Vec<(String, String)> {
 /// Percent-encode everything outside the unreserved set, for building links.
 pub fn percent_encode(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
-    for byte in input.as_bytes() {
-        let unreserved = byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~' | b'/');
+    for &byte in input.as_bytes() {
+        let unreserved =
+            byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~' | b'/');
         if unreserved {
-            out.push(*byte as char);
+            out.push(byte as char);
         } else {
             out.push_str(&format!("%{byte:02X}"));
         }
