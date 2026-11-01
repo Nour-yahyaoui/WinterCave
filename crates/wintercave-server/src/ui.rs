@@ -200,19 +200,18 @@ pub async fn page(state: web::Data<AppState>, query: web::Query<PathQuery>) -> H
     let mut notice = None;
     let mut current: Option<FileRecord> = None;
 
-    // Opening `/?path=` wins; otherwise the first file in the workspace is shown
-    // so the server-rendered page is never empty for no reason.
-    let target = if requested.is_empty() {
-        tree.entries
-            .iter()
-            .find(|entry| entry.kind == "file")
-            .map(|entry| entry.path.clone())
+    // Opening `/?path=` wins; otherwise the first *readable* file is shown, so a
+    // binary sitting at the top of the directory does not turn the landing page
+    // into a 415.
+    if requested.is_empty() {
+        for entry in tree.entries.iter().filter(|entry| entry.kind == "file") {
+            if let Ok(record) = state.files.read(&entry.path) {
+                current = Some(record);
+                break;
+            }
+        }
     } else {
-        Some(requested.clone())
-    };
-
-    if let Some(path) = target {
-        match state.files.read(&path) {
+        match state.files.read(&requested) {
             Ok(record) => current = Some(record),
             Err(error) => {
                 notice = Some(error.message.clone());

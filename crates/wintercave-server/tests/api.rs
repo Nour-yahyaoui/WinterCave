@@ -126,12 +126,31 @@ async fn page_renders_the_workspace_with_highlighted_text() {
     assert!(body.contains("id=\"editor\""));
     assert!(body.contains("/assets/editor.js"));
     assert!(body.contains("/assets/editor.css"));
-    // The first file in the tree is opened automatically.
+    // The sidebar lists the whole workspace, binary files included.
     assert!(body.contains("notes.md"));
-    // ...and it is highlighted server-side.
-    assert!(body.contains("<span class=\"t-heading\">"), "no heading span");
+    assert!(body.contains("binary.bin"));
+    // The landing page opens the first file it can actually read (binary.bin
+    // sorts first but answers 415), and highlights it server-side.
+    assert!(body.contains("data-path=\"code.rs\""), "wrong file auto-opened");
+    assert!(body.contains("<span class=\"t-keyword\">let</span>"), "no highlighting");
     // The no-JavaScript fallback form is always rendered.
-    assert!(body.contains("method=\"post\" action=\"/save?path=notes.md\""));
+    assert!(body.contains("method=\"post\" action=\"/save?path=code.rs\""));
+}
+
+#[actix_web::test]
+async fn page_highlights_markdown_headings() {
+    let fixture = Fixture::new("page-markdown");
+    let app = service!(fixture, false);
+
+    let response = test::call_service(
+        &app,
+        test::TestRequest::get().uri("/?path=notes.md").to_request(),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = text_body(response).await;
+    assert!(body.contains("data-language=\"markdown\""));
+    assert!(body.contains("<span class=\"t-heading\"># hello</span>"));
 }
 
 #[actix_web::test]

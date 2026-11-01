@@ -117,7 +117,7 @@ fn serves_the_page_the_assets_and_the_api() {
     let page = server.request("GET", "/", None);
     assert_eq!(Server::status_of(&page), 200, "{page}");
     assert!(page.contains("<textarea"), "no editor surface");
-    assert!(page.contains("<span class=\"t-heading\">"), "no highlighting");
+    assert!(page.contains("<span class=\"t-keyword\">let</span>"), "no highlighting");
     assert!(page.contains("WinterCave"));
     assert!(page.contains(env!("CARGO_PKG_VERSION")));
 
