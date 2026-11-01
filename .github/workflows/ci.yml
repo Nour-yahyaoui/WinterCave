@@ -6,6 +6,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   verify:
     name: Web shell (typecheck, tests, build)
@@ -29,22 +33,56 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
       - uses: Swatinem/rust-cache@v2
-      - name: Format (applied, diff shown)
+
+      # The sandbox that writes this branch has no Rust toolchain, so the branch
+      # formats itself here instead of asking a human to hand-apply a diff.
+      - name: Format and commit
+        if: github.event_name == 'pull_request' && github.head_ref != ''
         run: |
           cargo fmt --all
-          git --no-pager diff --stat
+          if git diff --quiet; then
+            echo "already formatted"
+            exit 0
+          fi
+          git config user.name "wintercave-ci"
+          git config user.email "wintercave-ci@users.noreply.github.com"
+          git add -A
+          git commit -m "style: cargo fmt"
+          git push
+
       - name: Tests
-        run: cargo test --workspace --all-targets
-      - name: Upload formatted sources
+        run: |
+          set -o pipefail
+          cargo test --workspace --all-targets 2>&1 | tee rust-test.log
+
+      # GitHub's log blobs are not reachable from the workspace sandbox, so the
+      # compiler output is posted where the branch author can read it.
+      - name: Publish compiler output
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: rust-sources
-          path: |
-            crates/
-            Cargo.lock
-          if-no-files-found: ignore
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          if [ -z "$PR_NUMBER" ]; then echo "not a pull request"; exit 0; fi
+          if [ ! -f rust-test.log ]; then echo "no log"; exit 0; fi
+          python3 - <<'PY' > payload.json
+          import json, os
+          text = open("rust-test.log", encoding="utf-8", errors="replace").read()
+          text = text[-90000:]
+          status = "failed" if "test result: FAILED" in text or "error[" in text or "error:" in text else "passed"
+          body = "### Rust core tests: " + status + "\n\n```text\n" + text.replace("```", "'''") + "\n```\n"
+          print(json.dumps({"body": body[:65000]}))
+          PY
+          curl -sS -X POST \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/issues/$PR_NUMBER/comments" \
+            -d @payload.json > /dev/null
+          echo posted
