@@ -259,15 +259,17 @@ mod tests {
             let removed = doc.remove(0, offset.min(doc.len()));
             assert!(removed.text().is_char_boundary(0));
         }
-        assert_eq!(doc.remove(1, 2).text(), "a😀b");
+        // A slice that would split `é` is floored back to a boundary.
+        assert_eq!(doc.remove(1, 2).text(), "aé😀b");
+        assert_eq!(doc.remove(1, 3).text(), "a😀b");
     }
 
     #[test]
     fn handles_multiline_and_unicode_positions() {
         let doc = TextDocument::new("héllo\n😀");
         let (line, column) = doc.position_at(4);
-        assert_eq!((line, column), (0, 3));
-        assert_eq!(doc.offset_at(0, 3), 4);
+        assert_eq!((line, column), (0, 4));
+        assert_eq!(doc.offset_at(0, 3), 3);
         assert_eq!(doc.line_text(1), "😀");
     }
 }
