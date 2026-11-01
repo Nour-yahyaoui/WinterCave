@@ -146,7 +146,7 @@ fn saves_highlights_and_deletes_over_http() {
     let saved = server.request(
         "PUT",
         "/api/files?path=notes.md",
-        Some(r#"{"text":"# edited over HTTP\n"}"#),
+        Some(r##"{"text":"# edited over HTTP\n"}"##),
     );
     assert_eq!(Server::status_of(&saved), 200, "{saved}");
     assert_eq!(
