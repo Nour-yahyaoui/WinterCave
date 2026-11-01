@@ -69,7 +69,7 @@ policy.
 `src/core/engine.ts` defines the seam. `loadRustEngine()` tries
 `/wasm/wintercave_core.js`; if it loads, the shell's auto-close decisions, Enter
 handling, smart Home and palette ranking all run in Rust, and the status bar
-reads `engine: rust 0.1.0`. If it does not load, the shell runs the TypeScript
+reads `engine: rust 0.3.0`. If it does not load, the shell runs the TypeScript
 reference core and the status bar reads `engine: typescript`. Both paths are
 tested (`tests/core/engine.test.ts` covers the adapter and the fallback).
 

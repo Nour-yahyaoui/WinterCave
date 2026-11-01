@@ -45,9 +45,13 @@ if (typeof wasm.initSync === 'function') {
   await wasm.default({ module_or_path: bytes });
 }
 
+const pkg = JSON.parse(await fsp.readFile(path.join(root, 'package.json'), 'utf8'));
+
 process.stdout.write(`engine version: ${wasm.version?.() ?? '(missing version export)'}\n`);
 
-equal('version', wasm.version(), '0.1.0');
+// The wasm engine version comes from Cargo.toml, the package version from
+// package.json: they must agree or the release tag lies about what shipped.
+equal('version', wasm.version(), pkg.version);
 equal('token kind 0', wasm.token_kind_name(0), 'keyword');
 equal('token kind 2', wasm.token_kind_name(2), 'comment');
 equal('token kind 16', wasm.token_kind_name(16), 'meta');

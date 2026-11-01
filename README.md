@@ -15,6 +15,9 @@ npm run build      # static bundle in dist/ (80 KB JS, 12 KB CSS, gzipped ~25 KB
 
 npm run server     # the small TypeScript server (static + file API) on :4173
 npm run serve      # build, then serve dist/ and the file API together
+npm run serve:rust # the same server in Rust (actix-web), if you have cargo
+
+npm run smoke:rust # drive the compiled actix server over real HTTP
 
 cargo test --workspace   # the Rust engine: 129 unit tests
 npm run wasm:build       # compile the engine to WebAssembly (needs Rust)
@@ -59,6 +62,7 @@ crates/wintercave-wasm/  wasm-bindgen surface for the browser
 src/core/                the TypeScript reference core, and the engine seam
 src/ui/                  shell: EditorView, palette, find bar, App wiring
 server/                  the small TypeScript server: static hosting + file API
+crates/wintercave-server/ the same server in Rust (actix-web), same JSON contract
 tests/core/              unit tests for the model and the engine seam
 tests/dom/               integration tests driving the real DOM (happy-dom)
 tests/server/            HTTP tests against a real socket and a temp workspace
@@ -72,7 +76,7 @@ map, the byte-offset convention and exactly which paths run in Rust today.
 **The engine seam.** `src/core/engine.ts` is the one place that decides which
 implementation is live. When `npm run wasm:build` has produced
 `public/wasm/wintercave_core.js`, auto-close, Enter handling, smart Home and
-palette ranking run in Rust and the status bar reads `engine: rust 0.1.0`.
+palette ranking run in Rust and the status bar reads `engine: rust 0.3.0`.
 Without that package — a fresh clone, or no Rust toolchain — the shell runs the
 TypeScript core and reads `engine: typescript`. Nothing silently differs between
 the two: the adapter is tested both ways, and CI loads the real wasm package and
@@ -104,6 +108,26 @@ then renamed over it, so a crash mid-write leaves either the old file or the new
 one and never a half-written buffer. Every path is confined to `--root`: `..`,
 absolute paths and NUL bytes are rejected before the filesystem is touched, and
 symlinks are resolved and checked. `--read-only` turns the whole API into reads.
+
+## The Rust server (actix)
+
+`crates/wintercave-server` is the same server written in Rust on
+[actix-web](https://actix.rs): the same routes, the same JSON, the same error
+codes, the same confinement and atomic-write guarantees. The web shell cannot
+tell which one answered it.
+
+```bash
+npm run build                                        # dist/ is what gets served
+cargo run -p wintercave-server -- --port 4173        # or: npm run serve:rust
+cargo test -p wintercave-server                      # 14 unit + 18 integration tests
+npm run smoke:rust                                   # 43 checks against the real binary
+```
+
+Both servers stay in the repository deliberately: the TypeScript one needs
+nothing but Node, the Rust one needs a toolchain (`rustup`), and the identical
+contract is what keeps them honest. `docs/actix-server.md`
+has the flags, the module map and the limits — HTTP only, no auth, blocking disk
+access, no request log, `dist/` not embedded.
 
 **Why a `textarea` and an overlay.** The `textarea` owns input, IME, clipboard,
 native caret movement and screen-reader access — all things that are extremely

@@ -1,7 +1,7 @@
 {
   "name": "wintercave",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "WinterCave \u2014 a latency-obsessed text editor with a platform-neutral core",
   "scripts": {
@@ -14,7 +14,9 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "wasm:build": "node scripts/build-wasm.mjs",
-    "wasm:smoke": "node scripts/wasm-smoke.mjs"
+    "wasm:smoke": "node scripts/wasm-smoke.mjs",
+    "serve:rust": "cargo run --quiet -p wintercave-server --",
+    "smoke:rust": "node scripts/actix-smoke.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

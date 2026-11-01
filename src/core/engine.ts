@@ -72,7 +72,7 @@ export interface WasmEngineModule {
 /** The TypeScript implementation, used when the Rust package is absent. */
 export const typescriptEngine: Engine = {
   kind: 'typescript',
-  version: '0.1.0',
+  version: '0.3.0',
 
   autoClose(input) {
     return decideAutoClose(input);

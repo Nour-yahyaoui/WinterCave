@@ -15,6 +15,7 @@ import { pathToFileURL } from 'node:url';
 
 import { createApp, SERVER_NAME } from './app.ts';
 import { DEFAULT_MAX_BYTES, FileService } from './fileService.ts';
+import { packageVersion } from './version.ts';
 
 export interface ServerConfig {
   port: number;
@@ -123,7 +124,7 @@ export function createServer(config: ServerConfig): http.Server {
 
   const handler = createApp({
     files,
-    version: process.env['npm_package_version'] ?? '0.1.0',
+    version: packageVersion(),
     assets: config.dist === null ? undefined : { directory: path.resolve(config.dist), spaFallback: true },
   });
 

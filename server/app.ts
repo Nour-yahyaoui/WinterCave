@@ -86,7 +86,7 @@ function queryPath(url: URL): string {
 
 export function createApp(options: AppOptions): Handler {
   const { files, assets } = options;
-  const version = options.version ?? '0.1.0';
+  const version = options.version ?? '0.0.0';
 
   return async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const started = Date.now();
