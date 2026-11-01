@@ -1,4 +1,5 @@
-import { fuzzyFilter, type FuzzyItem } from './fuzzy';
+import { currentEngine } from './engine';
+import type { FuzzyItem } from './fuzzy';
 
 export interface Command {
   id: string;
@@ -48,7 +49,15 @@ export class CommandRegistry {
     if (query.trim() === '') {
       return entries.slice(0, limit).map((item) => ({ item, score: 0, positions: [] }));
     }
-    return fuzzyFilter(entries, query.trim(), (command) => `${command.category}: ${command.title}`, limit);
+    const ranked = currentEngine().rank(
+      entries.map((command) => `${command.category}: ${command.title}`),
+      query.trim(),
+      limit,
+    );
+    return ranked.flatMap((entry) => {
+      const item = entries[entry.index];
+      return item ? [{ item, score: entry.score, positions: entry.positions }] : [];
+    });
   }
 
   async run(id: string): Promise<boolean> {

@@ -8,10 +8,17 @@ The feature plan this was built from lives in
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
-npm test           # 181 unit + DOM integration tests
+npm run dev        # editor on http://localhost:5173
+npm test           # 230 unit, DOM and server tests
 npm run typecheck  # tsc --noEmit
-npm run build      # static bundle in dist/ (76 KB JS, 12 KB CSS, gzipped ~23 KB)
+npm run build      # static bundle in dist/ (80 KB JS, 12 KB CSS, gzipped ~25 KB)
+
+npm run server     # the small TypeScript server (static + file API) on :4173
+npm run serve      # build, then serve dist/ and the file API together
+
+cargo test --workspace   # the Rust engine: 129 unit tests
+npm run wasm:build       # compile the engine to WebAssembly (needs Rust)
+npm run wasm:smoke       # load that package in Node and exercise the real API
 ```
 
 ## What works
@@ -47,15 +54,56 @@ LF/CRLF detection with round-trip preservation, and a toggle to convert.
 ## Architecture
 
 ```
-src/core/    pure TypeScript, zero DOM — the whole editor model
-src/ui/      shell: EditorView, palette, find bar, App wiring
-tests/core/  unit tests for the model
-tests/dom/   integration tests driving the real DOM (happy-dom)
+crates/wintercave-core/  the editor engine, in Rust (std + regex + unicode-segmentation)
+crates/wintercave-wasm/  wasm-bindgen surface for the browser
+src/core/                the TypeScript reference core, and the engine seam
+src/ui/                  shell: EditorView, palette, find bar, App wiring
+server/                  the small TypeScript server: static hosting + file API
+tests/core/              unit tests for the model and the engine seam
+tests/dom/               integration tests driving the real DOM (happy-dom)
+tests/server/            HTTP tests against a real socket and a temp workspace
 ```
+
+The editor core is Rust. `crates/wintercave-core` carries the document model,
+edits, undo, search, the tokenizer, the smart-editing rules, fuzzy matching and
+the keymap; see [`docs/rust-engine.md`](docs/rust-engine.md) for the module
+map, the byte-offset convention and exactly which paths run in Rust today.
+
+**The engine seam.** `src/core/engine.ts` is the one place that decides which
+implementation is live. When `npm run wasm:build` has produced
+`public/wasm/wintercave_core.js`, auto-close, Enter handling, smart Home and
+palette ranking run in Rust and the status bar reads `engine: rust 0.1.0`.
+Without that package — a fresh clone, or no Rust toolchain — the shell runs the
+TypeScript core and reads `engine: typescript`. Nothing silently differs between
+the two: the adapter is tested both ways, and CI loads the real wasm package and
+asserts the behaviour.
+
+The TypeScript core is kept, not deleted. It is the reference implementation the
+Rust port was written against, it is what makes the fallback honest, and its
+tests are the specification.
 
 `src/core` never imports from `src/ui`. That is what keeps a Tauri/Electron or
 CLI shell a bolt-on rather than a rewrite, and it is why the model is testable
 without a browser.
+
+## The tiny server
+
+`server/` is a dependency-free TypeScript server — `node:http`, `node:fs`,
+nothing else, no build step (`node --experimental-strip-types`).
+
+| Endpoint | Meaning |
+| --- | --- |
+| `GET /api/health` | engine name, version, workspace root, limits |
+| `GET /api/files?path=` | read a UTF-8 text file (404 / 413 / 415 as appropriate) |
+| `PUT /api/files?path=` | replace a file; `POST` creates one |
+| `DELETE /api/files?path=` | remove a file |
+| `GET /api/tree?path=` | list a directory, folders first |
+
+Writes are atomic: the text goes to a temp file next to the target, is flushed,
+then renamed over it, so a crash mid-write leaves either the old file or the new
+one and never a half-written buffer. Every path is confined to `--root`: `..`,
+absolute paths and NUL bytes are rejected before the filesystem is touched, and
+symlinks are resolved and checked. `--read-only` turns the whole API into reads.
 
 **Why a `textarea` and an overlay.** The `textarea` owns input, IME, clipboard,
 native caret movement and screen-reader access — all things that are extremely
@@ -94,6 +142,11 @@ Tracked as issues on this repository; the important ones:
   not known up front).
 - Not implemented yet: code folding, Markdown preview, local file history,
   keybinding remapping, workspace folder tree.
+- The Rust engine does not yet own the browser's document state or the
+  incremental highlight cache — those still run in TypeScript. The wasm `Engine`
+  implements and tests them; wiring the DOM path over is the next step
+  ([`docs/rust-engine.md`](docs/rust-engine.md) says exactly what is and is not
+  live).
 
 ## Keyboard
 

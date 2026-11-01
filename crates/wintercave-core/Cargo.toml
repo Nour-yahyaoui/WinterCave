@@ -1,0 +1,10 @@
+[package]
+name = "wintercave-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "WinterCave editor engine: document model, edits, undo, search, tokenizer"
+
+[dependencies]
+regex = "1"
+unicode-segmentation = "1"
