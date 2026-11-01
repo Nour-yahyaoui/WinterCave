@@ -319,8 +319,9 @@ mod tests {
         assert_eq!(resolve_command(&bindings, "Mod+s"), Some("file.save"));
         assert_eq!(
             resolve_command(&bindings, "Mod+ALT+UP"),
-            Some("edit.moveLineUp")
+            Some("cursor.addAbove")
         );
+        assert_eq!(resolve_command(&bindings, "alt+Up"), Some("edit.moveLineUp"));
         assert_eq!(
             resolve_command(&bindings, "Mod+/"),
             Some("edit.toggleComment")

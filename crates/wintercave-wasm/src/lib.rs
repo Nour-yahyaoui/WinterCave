@@ -24,14 +24,17 @@ use wintercave_core::keymap::{
     combo_from_event, default_bindings, find_conflicts, format_combo, normalize_combo, KeyEvent,
     Keymap,
 };
-use wintercave_core::language::{get_language, languages, tokenize_line, HighlightState, TokenType};
+use wintercave_core::language::{
+    get_language, languages, tokenize_line, HighlightState, TokenType,
+};
+use wintercave_core::limits::{classify_size, format_bytes, should_highlight};
 use wintercave_core::search::{Search, SearchOptions};
 use wintercave_core::selection::Selection;
 use wintercave_core::smart_edit::{
-    compute_newline, decide_auto_close, detect_indent, smart_home_target, toggle_comment_block,
-    toggle_line_comment_text, AutoCloseAction, IndentOptions, ReindentDirection, reindent_block,
+    compute_newline, decide_auto_close, detect_indent, reindent_block, smart_home_target,
+    toggle_comment_block, toggle_line_comment_text, AutoCloseAction, IndentOptions,
+    ReindentDirection,
 };
-use wintercave_core::limits::{classify_size, format_bytes, should_highlight};
 use wintercave_core::{TextDocument, VERSION};
 
 fn array_of_strings(values: &[String]) -> js_sys::Array {
@@ -69,8 +72,23 @@ fn token_code(kind: TokenType) -> u32 {
 }
 
 const TOKEN_NAMES: [&str; 17] = [
-    "keyword", "string", "comment", "number", "constant", "function", "type", "tag", "attribute",
-    "operator", "heading", "emphasis", "strong", "link", "code", "list", "meta",
+    "keyword",
+    "string",
+    "comment",
+    "number",
+    "constant",
+    "function",
+    "type",
+    "tag",
+    "attribute",
+    "operator",
+    "heading",
+    "emphasis",
+    "strong",
+    "link",
+    "code",
+    "list",
+    "meta",
 ];
 
 #[wasm_bindgen]
@@ -334,7 +352,13 @@ impl Engine {
     }
 
     /// Packed matches: `[start, end, start, end, ...]`.
-    pub fn search(&self, query: &str, case_sensitive: bool, whole_word: bool, regex: bool) -> Vec<u32> {
+    pub fn search(
+        &self,
+        query: &str,
+        case_sensitive: bool,
+        whole_word: bool,
+        regex: bool,
+    ) -> Vec<u32> {
         let search = Search::new(SearchOptions {
             query: query.to_string(),
             case_sensitive,
@@ -491,7 +515,12 @@ pub fn detect_indentation(text: &str, fallback_unit: &str, fallback_spaces: bool
 
 /// Reindent a block; `indent` is true for Tab, false for Shift+Tab.
 #[wasm_bindgen]
-pub fn reindent(lines: Vec<String>, indent_unit: &str, insert_spaces: bool, indent: bool) -> js_sys::Array {
+pub fn reindent(
+    lines: Vec<String>,
+    indent_unit: &str,
+    insert_spaces: bool,
+    indent: bool,
+) -> js_sys::Array {
     let options = IndentOptions {
         indent_unit: indent_unit.to_string(),
         insert_spaces,
@@ -518,7 +547,14 @@ pub fn toggle_comment_line(line: &str, prefix: Option<String>) -> String {
 }
 
 #[wasm_bindgen]
-pub fn key_combo(key: &str, ctrl: bool, meta: bool, alt: bool, shift: bool, is_mac: bool) -> String {
+pub fn key_combo(
+    key: &str,
+    ctrl: bool,
+    meta: bool,
+    alt: bool,
+    shift: bool,
+    is_mac: bool,
+) -> String {
     combo_from_event(
         &KeyEvent {
             key: key.to_string(),
@@ -594,7 +630,11 @@ pub fn size_report(bytes: f64, lines: usize) -> js_sys::Array {
 
 /// `[{ id, title, category, keys }]` for palette rendering.
 #[wasm_bindgen]
-pub fn command_labels(ids: Vec<String>, titles: Vec<String>, categories: Vec<String>) -> js_sys::Array {
+pub fn command_labels(
+    ids: Vec<String>,
+    titles: Vec<String>,
+    categories: Vec<String>,
+) -> js_sys::Array {
     let out = js_sys::Array::new();
     for index in 0..ids.len().min(titles.len()).min(categories.len()) {
         let entry = CommandMeta::new(&ids[index], &titles[index], &categories[index]);
