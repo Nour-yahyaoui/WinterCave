@@ -24,14 +24,8 @@ import {
   selectionStart,
   type Selection,
 } from '../core/selection';
-import {
-  computeNewline,
-  decideAutoClose,
-  detectIndent,
-  reindentBlock,
-  smartHomeTarget,
-  toggleCommentBlock,
-} from '../core/smartEdit';
+import { detectIndent, reindentBlock, toggleCommentBlock } from '../core/smartEdit';
+import { currentEngine, engineLabel } from '../core/engine';
 import {
   JOURNAL_KEY,
   clearJournal,
@@ -42,7 +36,6 @@ import {
   type JournalEntry,
   type SerializedDocument,
 } from '../core/session';
-import { fuzzyFilter } from '../core/fuzzy';
 import { nextGraphemeBoundary, previousGraphemeBoundary } from '../core/text';
 import { clear, debounce, el } from './dom';
 import { EditorView } from './editorView';
@@ -164,6 +157,7 @@ export class App {
     encoding?: HTMLElement;
     eol?: HTMLButtonElement;
     size?: HTMLElement;
+    engine?: HTMLElement;
     state?: HTMLElement;
   } = {};
 
@@ -432,6 +426,11 @@ export class App {
     eol.addEventListener('click', () => this.toggleLineEnding());
     this.statusRefs.eol = eol;
     this.statusRefs.size = el('span', { class: 'status-item' });
+    const engine = el('span', { class: 'status-item', text: `engine: ${engineLabel()}` });
+    engine.title =
+      'Editor engine — rust runs the WebAssembly build of crates/wintercave-core, typescript is the fallback core in src/core';
+    engine.dataset['engine'] = currentEngine().kind;
+    this.statusRefs.engine = engine;
     this.statusRefs.state = el('span', { class: 'status-item' });
 
     const wrapToggle = make();
@@ -453,6 +452,7 @@ export class App {
       this.statusRefs.encoding,
       this.statusRefs.eol,
       this.statusRefs.size,
+      engine,
       wrapToggle,
       themeButton,
       this.statusRefs.language,
@@ -702,7 +702,7 @@ export class App {
       const primary = primarySelection(active.selections);
       const from = selectionStart(primary);
       const to = selectionEnd(primary);
-      const action = decideAutoClose({
+      const action = currentEngine().autoClose({
         char: text,
         before: active.doc.text[from - 1] ?? '',
         after: active.doc.text[to] ?? '',
@@ -747,7 +747,7 @@ export class App {
       const to = selectionEnd(selection);
       const line = active.doc.lineAt(from);
       const range = active.doc.lineRange(line);
-      const result = computeNewline({
+      const result = currentEngine().newline({
         lineText: active.doc.text.slice(range.start, range.end),
         column: from - range.start,
         indentUnit: active.indent.indentUnit,
@@ -1022,7 +1022,7 @@ export class App {
     const range = active.doc.lineRange(line);
     const lineText = active.doc.text.slice(range.start, range.end);
     const column = head - range.start;
-    const target = toEnd ? range.end : smartHomeTarget(lineText, column);
+    const target = toEnd ? range.end : currentEngine().smartHome(lineText, column);
     const anchor = extend ? primary.anchor : target;
     active.selections = [{ anchor, head: target }];
     this.render({ syncSelection: true });
@@ -1176,10 +1176,15 @@ export class App {
       placeholder: 'Type a file name…',
       filter: (query) => {
         if (query.trim() === '') return items;
-        return fuzzyFilter(items, query.trim(), (item) => item.label, 30).map((entry) => ({
-          ...entry.item,
-          positions: entry.positions,
-        }));
+        const ranked = currentEngine().rank(
+          items.map((item) => item.label),
+          query.trim(),
+          30,
+        );
+        return ranked.flatMap((entry) => {
+          const item = items[entry.index];
+          return item ? [{ ...item, positions: entry.positions }] : [];
+        });
       },
       onSelect: (item) => this.activate(item.id, { restoreScroll: true }),
     });
