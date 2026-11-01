@@ -21,6 +21,11 @@ pub const DEFAULT_MAX_BYTES: u64 = 10_000_000;
 const IGNORED_ENTRIES: [&str; 4] = [".git", "node_modules", "target", ".DS_Store"];
 const BINARY_SNIFF_BYTES: usize = 8_000;
 
+/// How deep quick open looks below the folder it was asked about.
+pub const WALK_DEPTH: usize = 6;
+/// Hard cap on the entries a single walk collects.
+pub const WALK_ENTRIES: usize = 4_000;
+
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone)]
@@ -330,6 +335,42 @@ impl FileService {
             path: normalized,
             entries,
         })
+    }
+
+    /// Recursively list `relative`, depth-first.
+    ///
+    /// Bounded on purpose: quick open is a convenience, not an indexer. It stops
+    /// at `WALK_DEPTH` levels and `WALK_ENTRIES` entries so a huge tree cannot
+    /// stall the page.
+    pub fn walk(&self, relative: &str) -> Result<Vec<TreeEntry>, ServerError> {
+        let mut entries = Vec::new();
+        self.walk_into(relative, WALK_DEPTH, &mut entries)?;
+        Ok(entries)
+    }
+
+    fn walk_into(
+        &self,
+        relative: &str,
+        depth: usize,
+        entries: &mut Vec<TreeEntry>,
+    ) -> Result<(), ServerError> {
+        if depth == 0 || entries.len() >= WALK_ENTRIES {
+            return Ok(());
+        }
+
+        let listing = self.tree(if relative.is_empty() { "." } else { relative })?;
+        for entry in listing.entries {
+            if entries.len() >= WALK_ENTRIES {
+                return Ok(());
+            }
+            let descend = entry.kind == "dir";
+            let path = entry.path.clone();
+            entries.push(entry);
+            if descend {
+                self.walk_into(&path, depth - 1, entries)?;
+            }
+        }
+        Ok(())
     }
 
     pub fn health(&self) -> HealthInfo {

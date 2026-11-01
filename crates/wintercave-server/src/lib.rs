@@ -11,6 +11,8 @@
 //! GET  /assets/editor.css     the stylesheet
 //! POST /save?path=            the no-JavaScript form save
 //! POST /api/highlight         text in, highlighted HTML out
+//! POST /api/complete          text in, suggestions for the caret out
+//! POST /api/find              quick open: rank files below a folder
 //! GET  /api/health            server name, version, root, limits
 //! GET  /api/files?path=       read a UTF-8 text file
 //! PUT  /api/files?path=       replace a file
@@ -69,6 +71,18 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(
                 web::resource("/highlight")
                     .route(web::post().to(ui::highlight_handler))
+                    .route(web::route().guard(guard::Options()).to(api::preflight))
+                    .route(web::route().to(api::method_not_allowed)),
+            )
+            .service(
+                web::resource("/complete")
+                    .route(web::post().to(ui::complete_handler))
+                    .route(web::route().guard(guard::Options()).to(api::preflight))
+                    .route(web::route().to(api::method_not_allowed)),
+            )
+            .service(
+                web::resource("/find")
+                    .route(web::post().to(api::find_files))
                     .route(web::route().guard(guard::Options()).to(api::preflight))
                     .route(web::route().to(api::method_not_allowed)),
             )

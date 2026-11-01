@@ -18,6 +18,7 @@
 //! nothing else — so `cargo test` runs anywhere and the wasm build stays small.
 
 pub mod commands;
+pub mod complete;
 pub mod document;
 pub mod edits;
 pub mod fuzzy;
@@ -30,6 +31,7 @@ pub mod selection;
 pub mod smart_edit;
 pub mod text;
 
+pub use complete::{byte_to_utf16, complete, utf16_to_byte, Completion, CompletionKind};
 pub use document::TextDocument;
 pub use edits::{AppliedEdit, TextEdit};
 pub use history::{EditKind, History, HistoryRecord};
