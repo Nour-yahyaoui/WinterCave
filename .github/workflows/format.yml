@@ -1,8 +1,8 @@
 name: Format
 
 # Temporary helper, deleted once the actix crate is green. The authoring sandbox
-# has no Rust toolchain, so CI does the formatting and reports it as a patch in
-# check-run annotations, together with any compiler and test diagnostics.
+# has no Rust toolchain, so CI formats the code and publishes each formatted file
+# as a base64 annotation (FILE|<path>|<base64>) plus compiler/test diagnostics.
 on:
   workflow_dispatch:
   push:
@@ -18,23 +18,27 @@ jobs:
         with:
           components: rustfmt
       - uses: Swatinem/rust-cache@v2
-      - name: Formatting patch
+      - name: Publish formatted files
         run: |
           cargo fmt --all
           if git diff --quiet; then
-            echo "::warning::already formatted"
-          else
-            git diff > /tmp/fmt.patch
-            echo "::warning::rustfmt changed files, see annotations for the patch"
-            while IFS= read -r line; do printf '::error::%s\n' "$line"; done < /tmp/fmt.patch
+            echo "::warning::already formatted, nothing to publish"
+            exit 0
           fi
+          for file in $(git diff --name-only); do
+            printf '::error::FILE|%s|%s\n' "$file" "$(base64 -w0 "$file")"
+          done
       - name: Build diagnostics
         continue-on-error: true
         run: |
           cargo build -p wintercave-server --message-format=short > /tmp/build.log 2>&1
-          tail -n 150 /tmp/build.log | while IFS= read -r line; do printf '::error::%s\n' "$line"; done
+          grep -E '^(error|warning)' /tmp/build.log | head -n 80 | while IFS= read -r line; do
+            printf '::error::BUILD|%s\n' "$line"
+          done
       - name: Test diagnostics
         continue-on-error: true
         run: |
           cargo test -p wintercave-server > /tmp/test.log 2>&1
-          tail -n 150 /tmp/test.log | while IFS= read -r line; do printf '::error::%s\n' "$line"; done
+          grep -E '^(error|test .* FAILED|failures:|---- )' /tmp/test.log | head -n 80 | while IFS= read -r line; do
+            printf '::error::TEST|%s\n' "$line"
+          done
