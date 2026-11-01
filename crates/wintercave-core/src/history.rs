@@ -77,13 +77,17 @@ impl History {
         }
         self.redo_stack.clear();
 
-        if let Some(top) = self.undo_stack.last_mut() {
-            if self.should_group(top, &record) {
+        let groups = match self.undo_stack.last() {
+            Some(top) => self.should_group(top, &record),
+            None => false,
+        };
+        if groups {
+            if let Some(top) = self.undo_stack.last_mut() {
                 top.edits.extend(record.edits);
                 top.sel_after = record.sel_after;
                 top.at = record.at;
-                return;
             }
+            return;
         }
 
         self.undo_stack.push(record);

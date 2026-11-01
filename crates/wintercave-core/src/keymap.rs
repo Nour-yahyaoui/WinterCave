@@ -125,7 +125,8 @@ pub fn combo_from_event(event: &KeyEvent, is_mac: bool) -> String {
     if event.shift {
         modifiers.push("Shift");
     }
-    modifiers.push(&canonical_key(&event.key));
+    let key = canonical_key(&event.key);
+    modifiers.push(key.as_str());
     modifiers.join("+")
 }
 

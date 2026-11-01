@@ -416,7 +416,8 @@ mod tests {
         };
         let indented = reindent_block(&["a", "  b"], &options, ReindentDirection::Indent);
         assert_eq!(indented, vec!["  a", "    b"]);
-        let outdented = reindent_block(&indented, &options, ReindentDirection::Outdent);
+        let borrowed: Vec<&str> = indented.iter().map(|line| line.as_str()).collect();
+        let outdented = reindent_block(&borrowed, &options, ReindentDirection::Outdent);
         assert_eq!(outdented, vec!["a", "  b"]);
     }
 
