@@ -165,13 +165,21 @@ pub fn complete(
 }
 
 /// Byte offset for a UTF-16 code-unit offset — what `selectionStart` reports.
+///
+/// An offset that lands *inside* a character (the second half of an emoji, say)
+/// snaps back to that character's start: the caret is in front of the glyph it
+/// is reported to be in, never after it.
 pub fn utf16_to_byte(text: &str, offset: usize) -> usize {
     let mut units = 0_usize;
     for (index, ch) in text.char_indices() {
         if units >= offset {
             return index;
         }
-        units += ch.len_utf16();
+        let next = units + ch.len_utf16();
+        if next > offset {
+            return index;
+        }
+        units = next;
     }
     text.len()
 }
