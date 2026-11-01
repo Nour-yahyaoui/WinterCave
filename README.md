@@ -83,8 +83,13 @@ program.
 python3 -m http.server 3000 --directory site   # look at it
 ```
 
-Vercel project settings: framework *Other*, no build command, output directory
-`site`.
+Vercel project: `wintercave` (`prj_r5p8QHpFxixqYJz2dLTfrFZHFezZ`), output
+directory `site`, build and install commands set to no-ops. The framework is
+recorded as `svelte` only because the Vercel API rejects `other` through the
+connector and refuses the first deployment of a project without framework
+settings; nothing is built, the two files are served as they are. Git pushes do
+not deploy on their own (the integration has `createDeployments: disabled`), so
+deploy from the commit you want with the Vercel tool.
 
 ## Architecture
 
