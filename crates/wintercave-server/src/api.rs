@@ -5,22 +5,19 @@
 //! through a real actix service instead of a mocked one.
 
 use actix_web::http::header;
-use actix_web::http::{Method, StatusCode};
+use actix_web::http::StatusCode;
 use actix_web::{web, HttpRequest, HttpResponse};
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::error::ServerError;
 use crate::files::FileService;
-use crate::static_files::{self, StaticOptions};
 use crate::{BODY_LIMIT, SERVER_NAME};
 
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub files: FileService,
     pub version: String,
-    /// Static hosting; `None` runs the server in API-only mode.
-    pub assets: Option<StaticOptions>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -29,11 +26,11 @@ pub struct PathQuery {
     pub path: Option<String>,
 }
 
-fn query_path(query: &PathQuery) -> &str {
+pub(crate) fn query_path(query: &PathQuery) -> &str {
     query.path.as_deref().unwrap_or("")
 }
 
-fn json(status: StatusCode, body: &Value) -> HttpResponse {
+pub(crate) fn json(status: StatusCode, body: &Value) -> HttpResponse {
     HttpResponse::build(status)
         .insert_header((header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"))
         .insert_header((header::CONTENT_TYPE, "application/json; charset=utf-8"))
@@ -44,12 +41,6 @@ fn json(status: StatusCode, body: &Value) -> HttpResponse {
 
 fn error_value(code: &str, message: &str) -> Value {
     serde_json::json!({ "error": { "code": code, "message": message } })
-}
-
-fn plain(status: StatusCode, message: &str) -> HttpResponse {
-    HttpResponse::build(status)
-        .insert_header((header::CONTENT_TYPE, "text/plain; charset=utf-8"))
-        .body(message.to_string())
 }
 
 fn to_value<T: serde::Serialize>(value: &T) -> Result<Value, ServerError> {
@@ -72,7 +63,7 @@ fn ensure_body_size(request: &HttpRequest) -> Result<(), ServerError> {
 }
 
 /// A JSON object body, or the same errors the TypeScript server produces.
-fn parse_body(bytes: &[u8]) -> Result<Value, ServerError> {
+pub(crate) fn parse_body(bytes: &[u8]) -> Result<Value, ServerError> {
     let text = String::from_utf8_lossy(bytes);
     if text.trim().is_empty() {
         return Ok(serde_json::json!({}));
@@ -195,40 +186,4 @@ pub async fn preflight() -> HttpResponse {
         .insert_header((header::ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type"))
         .insert_header((header::ACCESS_CONTROL_MAX_AGE, "600"))
         .finish()
-}
-
-/// Everything that is not `/api/*`: the built web shell.
-pub async fn serve_static(request: HttpRequest) -> HttpResponse {
-    let Some(state) = request.app_data::<web::Data<AppState>>().cloned() else {
-        return plain(StatusCode::INTERNAL_SERVER_ERROR, "Server is not configured.");
-    };
-
-    let method = request.method().clone();
-    if method != Method::GET && method != Method::HEAD {
-        return json(
-            StatusCode::METHOD_NOT_ALLOWED,
-            &error_value("method_not_allowed", "Use GET."),
-        );
-    }
-
-    let Some(assets) = state.assets.as_ref() else {
-        return json(
-            StatusCode::NOT_FOUND,
-            &error_value("not_found", "Nothing is served here."),
-        );
-    };
-
-    let Some(decoded) = static_files::percent_decode(request.path()) else {
-        return plain(StatusCode::BAD_REQUEST, "Malformed URL");
-    };
-    if decoded.contains('\0') {
-        return plain(StatusCode::BAD_REQUEST, "Malformed URL");
-    }
-
-    let if_none_match = request
-        .headers()
-        .get(header::IF_NONE_MATCH)
-        .and_then(|value| value.to_str().ok());
-
-    static_files::serve(assets, &decoded, &method, if_none_match)
 }

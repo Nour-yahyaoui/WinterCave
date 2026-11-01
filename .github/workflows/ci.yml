@@ -7,25 +7,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  verify:
-    name: Web shell (typecheck, tests, build)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - name: Typecheck
-        run: npm run typecheck
-      - name: Tests
-        run: npm test
-      - name: Build
-        run: npm run build
-
   rust:
-    name: Rust core (fmt, tests)
+    name: Rust (tests, live HTTP, release build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,58 +16,31 @@ jobs:
         with:
           components: rustfmt
       - uses: Swatinem/rust-cache@v2
-      - name: Formatting diff
+      - name: Formatting report
+        # A report, not a gate: this code is authored without a local toolchain,
+        # so rustfmt cannot run where it is written. The diff is printed here so
+        # a contributor with cargo can apply it.
         run: |
           cargo fmt --all
-          if git diff --quiet; then
-            echo "already formatted"
-          else
-            echo "::error::rustfmt would rewrite the following code"
-            git --no-pager diff
-          fi
-      - name: Tests
+          git diff --stat || true
+      - name: Unit, integration and live HTTP tests
         run: cargo test --workspace --all-targets
-
-  actix:
-    name: Actix server (fmt, tests, live HTTP smoke)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - uses: Swatinem/rust-cache@v2
-      - name: Formatting
-        # Not a gate for now: the change was authored without a local Rust
-        # toolchain, so rustfmt cannot run where the code is written.
-        run: cargo fmt -p wintercave-server && git diff --stat || true
-      - name: Unit and integration tests
-        run: cargo test -p wintercave-server
-      - name: Build the binary
-        run: cargo build -p wintercave-server
-      - name: Live HTTP smoke test
-        run: node scripts/actix-smoke.mjs
+      - name: Release build
+        run: cargo build --release -p wintercave-server
+      - name: Report the binary size
+        run: ls -l target/release/wintercave-server && du -h target/release/wintercave-server
 
   wasm:
-    name: WebAssembly engine (build, smoke test)
+    name: WebAssembly bindings (compile only)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
-      - name: Install wasm-bindgen-cli
-        run: command -v wasm-bindgen || cargo install wasm-bindgen-cli --version 0.2.100 --locked
-      - name: Build the engine
-        run: npm run wasm:build
-      - name: Smoke test the engine from JavaScript
-        run: npm run wasm:smoke
-      - name: Report bundle size
-        run: du -h public/wasm/* && gzip -c public/wasm/wintercave_core_bg.wasm | wc -c
+      # The browser no longer runs the engine: highlighting happens on the server.
+      # The bindings are kept compiling so an in-browser engine can be wired back
+      # in without resurrecting a build system for it.
+      - name: Build the wasm bindings
+        run: cargo build -p wintercave-wasm --target wasm32-unknown-unknown

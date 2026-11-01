@@ -1,19 +1,19 @@
-//! WinterCave's local server, on actix-web.
+//! WinterCave's local editor server.
 //!
-//!   cargo run -p wintercave-server -- --port 4173 --root . --dist dist
+//!   cargo run -p wintercave-server -- --port 4173 --root .
 //!
-//! It serves the built web shell and a file API confined to `--root`. The same
-//! job `server/index.ts` does, in Rust, because that is what this crate is for.
+//! It serves the editor page and a file API confined to `--root`. Everything —
+//! the document model, the tokenizer, the highlighting and the HTTP handlers —
+//! is Rust; the browser only needs the tiny script the server serves.
 
 use std::collections::HashMap;
 use std::path::Path;
 
 use actix_web::{web, App, HttpServer};
 
-use wintercave_server::api::{serve_static, AppState};
+use wintercave_server::api::AppState;
 use wintercave_server::config::{self, ParseOutcome};
 use wintercave_server::files::{FileService, FileServiceOptions};
-use wintercave_server::static_files::StaticOptions;
 use wintercave_server::{configure, paths, ServerError, BODY_LIMIT, SERVER_NAME};
 
 fn to_io(error: ServerError) -> std::io::Error {
@@ -46,25 +46,16 @@ async fn main() -> std::io::Result<()> {
     })
     .map_err(to_io)?;
 
-    let assets = match settings.dist.as_ref() {
-        Some(dist) => Some(StaticOptions::new(
-            paths::absolute(Path::new(dist)).map_err(to_io)?,
-        )),
-        None => None,
-    };
-
     let version = env!("CARGO_PKG_VERSION").to_string();
     let state = AppState {
         files,
         version: version.clone(),
-        assets,
     };
 
     println!("{SERVER_NAME} {version}");
     println!("  root: {}", root.display());
-    match settings.dist.as_ref() {
-        Some(dist) => println!("  dist: {dist}"),
-        None => println!("  dist: (API only)"),
+    if settings.read_only {
+        println!("  mode: read only");
     }
 
     let shared = state.clone();
@@ -73,12 +64,10 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(shared.clone()))
             .app_data(web::PayloadConfig::new(BODY_LIMIT))
             .configure(configure)
-            .default_service(web::to(serve_static))
     })
     .bind((settings.host.as_str(), settings.port))?;
 
-    let addresses = server.addrs();
-    for address in &addresses {
+    for address in server.addrs() {
         println!("listening on http://{address}");
     }
 

@@ -1,21 +1,21 @@
-//! Command line and environment parsing — same flags as `server/index.ts`,
-//! because muscle memory should not have to change when the server does.
+//! Command line and environment parsing.
 
 use std::collections::HashMap;
 
 pub const USAGE: &str = "\
-WinterCave server (actix)
+WinterCave — the local editor server
 
 Usage: wintercave-server [options]
 
   -p, --port <n>      port to listen on (default 4173, or $PORT; 0 picks a free port)
       --host <addr>   address to bind (default 0.0.0.0, or $HOST)
-      --root <dir>    directory the file API may read/write (default .)
-      --dist <dir>    built app to serve (default dist)
-      --no-dist       API only
-      --read-only     refuse writes
+      --root <dir>    directory the editor may read/write (default .)
+      --read-only     open files, refuse writes
       --max-bytes <n> largest file accepted, in bytes
-  -h, --help          show this help";
+  -h, --help          show this help
+
+Point a browser at the printed address, or pass --host 127.0.0.1 to keep the
+server off the network entirely.";
 
 pub const DEFAULT_PORT: u16 = 4173;
 pub const DEFAULT_HOST: &str = "0.0.0.0";
@@ -25,8 +25,6 @@ pub struct Config {
     pub port: u16,
     pub host: String,
     pub root: String,
-    /// `None` serves the API alone.
-    pub dist: Option<String>,
     pub read_only: bool,
     pub max_bytes: u64,
 }
@@ -37,7 +35,6 @@ impl Default for Config {
             port: DEFAULT_PORT,
             host: DEFAULT_HOST.to_string(),
             root: ".".to_string(),
-            dist: Some("dist".to_string()),
             read_only: false,
             max_bytes: crate::files::DEFAULT_MAX_BYTES,
         }
@@ -71,12 +68,7 @@ fn take(
         .ok_or_else(|| format!("{label} needs a value"))
 }
 
-/// Parse arguments with the same semantics as the TypeScript server: `--flag value`
-/// and `--flag=value` both work, and `$PORT`/`$HOST` provide the defaults.
-pub fn parse_args(
-    args: &[String],
-    env: &HashMap<String, String>,
-) -> Result<ParseOutcome, String> {
+pub fn parse_args(args: &[String], env: &HashMap<String, String>) -> Result<ParseOutcome, String> {
     let mut config = Config::default();
     if let Some(port) = env.get("PORT") {
         config.port = number(port, "port")?;
@@ -86,9 +78,6 @@ pub fn parse_args(
     }
     if let Some(root) = env.get("WINTERCAVE_ROOT") {
         config.root = root.clone();
-    }
-    if let Some(dist) = env.get("WINTERCAVE_DIST") {
-        config.dist = Some(dist.clone());
     }
 
     let mut index = 0;
@@ -106,8 +95,6 @@ pub fn parse_args(
             }
             "--host" => config.host = take(args, &mut index, inline, "--host")?,
             "--root" => config.root = take(args, &mut index, inline, "--root")?,
-            "--dist" => config.dist = Some(take(args, &mut index, inline, "--dist")?),
-            "--no-dist" => config.dist = None,
             "--read-only" => config.read_only = true,
             "--max-bytes" => {
                 config.max_bytes = number(
@@ -142,12 +129,11 @@ mod tests {
     }
 
     #[test]
-    fn defaults_match_the_typescript_server() {
+    fn defaults_are_local_and_bounded() {
         let config = run(&[]);
         assert_eq!(config.port, DEFAULT_PORT);
         assert_eq!(config.host, DEFAULT_HOST);
         assert_eq!(config.root, ".");
-        assert_eq!(config.dist.as_deref(), Some("dist"));
         assert!(!config.read_only);
         assert_eq!(config.max_bytes, crate::files::DEFAULT_MAX_BYTES);
     }
@@ -168,15 +154,6 @@ mod tests {
         assert_eq!(config.root, "/tmp/ws");
         assert_eq!(config.max_bytes, 2048);
         assert!(config.read_only);
-    }
-
-    #[test]
-    fn no_dist_switches_to_api_only() {
-        assert_eq!(run(&["--no-dist"]).dist, None);
-        assert_eq!(
-            run(&["--dist", "build"]).dist.as_deref(),
-            Some("build")
-        );
     }
 
     #[test]
