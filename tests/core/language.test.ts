@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   EMPTY_HIGHLIGHT_STATE,
+  HighlightCache,
+  arrayLineSource,
   flattenTokens,
   getLanguage,
   languageForFilename,
@@ -160,5 +162,57 @@ describe('flattenTokens', () => {
 
   it('ignores tokens outside the line', () => {
     expect(flattenTokens('ab', [{ start: 5, end: 9, type: 'string' }])).toEqual([]);
+  });
+});
+
+describe('HighlightCache', () => {
+  const lines = [
+    'const a = 1;',
+    '/* comment',
+    'still comment',
+    'end */ const b = 2;',
+    'const c = "str";',
+  ];
+
+  it('matches full tokenization for a window', () => {
+    const cache = new HighlightCache();
+    const windowed = cache.window(arrayLineSource(lines), getLanguage('javascript'), 2, 5);
+    const full = tokenizeLines(lines, getLanguage('javascript'), { from: 2, to: 5 });
+    for (let index = 2; index < 5; index += 1) {
+      expect(windowed.get(index)).toEqual(full.get(index)?.tokens);
+    }
+  });
+
+  it('reuses cached lines without changing results', () => {
+    const cache = new HighlightCache();
+    cache.window(arrayLineSource(lines), getLanguage('javascript'), 0, 3);
+    const second = cache.window(arrayLineSource(lines), getLanguage('javascript'), 0, 5);
+    expect(second.get(1)?.[0]?.type).toBe('comment');
+    expect(second.get(4)?.[0]?.type).toBe('keyword');
+  });
+
+  it('recomputes after an invalidation that opens a block comment', () => {
+    const cache = new HighlightCache();
+    const language = getLanguage('javascript');
+    cache.window(arrayLineSource(lines), language, 0, 5);
+    const edited = ['const a = 1;', '/* comment', 'still comment', 'end */ const b = 2;', 'const c = "str";'];
+    edited[0] = 'const a = 1; /* opened here';
+    cache.invalidateFrom(0);
+    const refreshed = cache.window(arrayLineSource(edited), language, 3, 4);
+    expect(refreshed.get(3)?.[0]?.type).toBe('comment');
+  });
+
+  it('starts over when the language changes', () => {
+    const cache = new HighlightCache();
+    cache.window(arrayLineSource(lines), getLanguage('javascript'), 0, 5);
+    const asMarkdown = cache.window(arrayLineSource(['# heading']), getLanguage('markdown'), 0, 1);
+    expect(asMarkdown.get(0)?.[0]?.type).toBe('heading');
+    expect(cache.size).toBe(1);
+  });
+
+  it('clamps windows to the document', () => {
+    const cache = new HighlightCache();
+    const result = cache.window(arrayLineSource(lines), getLanguage('javascript'), 3, 99);
+    expect([...result.keys()]).toEqual([3, 4]);
   });
 });

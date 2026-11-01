@@ -533,6 +533,15 @@ export function tokenizeLine(
   }
 }
 
+export interface LineSource {
+  readonly lineCount: number;
+  lineText(index: number): string;
+}
+
+export function arrayLineSource(lines: readonly string[]): LineSource {
+  return { lineCount: lines.length, lineText: (index: number) => lines[index] ?? '' };
+}
+
 export interface TokenizedLine {
   tokens: Token[];
   /** State expected at the start of this line. */
@@ -585,4 +594,96 @@ export function flattenTokens(line: string, tokens: readonly Token[]): Token[] {
     }
   }
   return runs;
+}
+
+/** Lines we are willing to re-tokenize to recover multi-line state. */
+const MAX_STATE_REPLAY = 3000;
+
+interface CachedLine {
+  entry: HighlightState;
+  exit: HighlightState;
+  tokens: Token[];
+}
+
+function statesEqual(a: HighlightState, b: HighlightState): boolean {
+  return a.blockComment === b.blockComment && a.string === b.string && a.fence === b.fence;
+}
+
+/**
+ * Per-line highlight cache with carried multi-line state.
+ *
+ * Re-tokenizing a 25k-line buffer on every keystroke costs ~150ms; tokenizing
+ * only the visible window costs microseconds. Entries below the first changed
+ * line stay valid, so an edit near the caret keeps the rest of the document
+ * warm.
+ */
+export class HighlightCache {
+  private entries = new Map<number, CachedLine>();
+  private languageId: string | null = null;
+
+  reset(languageId?: string): void {
+    this.entries.clear();
+    if (languageId !== undefined) this.languageId = languageId;
+  }
+
+  /** Drop everything at or below a line that changed. */
+  invalidateFrom(line: number): void {
+    if (this.entries.size === 0) return;
+    for (const index of [...this.entries.keys()]) {
+      if (index >= line) this.entries.delete(index);
+    }
+  }
+
+  get size(): number {
+    return this.entries.size;
+  }
+
+  /** Tokenized lines for `[from, to)`, reusing whatever is still valid. */
+  window(
+    source: LineSource,
+    language: LanguageDef,
+    from: number,
+    to: number,
+  ): Map<number, Token[]> {
+    if (this.languageId !== language.id) this.reset(language.id);
+    const start = Math.max(0, Math.min(from, source.lineCount));
+    const end = Math.max(start, Math.min(to, source.lineCount));
+    const out = new Map<number, Token[]>();
+
+    // Start from the closest line whose exit state we already know. Without one
+    // the window must be replayed from the top, otherwise a block comment
+    // opened above the viewport would be coloured as code.
+    let index = 0;
+    let state = EMPTY_HIGHLIGHT_STATE;
+    for (let probe = start - 1; probe >= 0; probe -= 1) {
+      const cached = this.entries.get(probe);
+      if (cached) {
+        state = cached.exit;
+        index = probe + 1;
+        break;
+      }
+    }
+    // Replaying tens of thousands of lines to colour 40 is worse than a
+    // slightly wrong colour after a huge jump; cap the replay distance.
+    if (start - index > MAX_STATE_REPLAY) {
+      index = start;
+      state = EMPTY_HIGHLIGHT_STATE;
+    }
+
+    for (; index < end; index += 1) {
+      const line = source.lineText(index);
+      const cached = this.entries.get(index);
+      if (cached && statesEqual(cached.entry, state)) {
+        if (index >= start) out.set(index, cached.tokens);
+        state = cached.exit;
+        continue;
+      }
+      const tokenized = tokenizeLine(line, language, state);
+      this.entries.set(index, { entry: state, exit: tokenized.state, tokens: tokenized.tokens });
+      if (index >= start) out.set(index, tokenized.tokens);
+      state = tokenized.state;
+    }
+
+    return out;
+  }
 }

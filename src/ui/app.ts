@@ -11,7 +11,7 @@ import {
   resolveCommand,
   type Keymap,
 } from '../core/keymap';
-import { LANGUAGES, getLanguage, languageForFilename } from '../core/language';
+import { LANGUAGES, getLanguage, languageForFilename, type LineSource } from '../core/language';
 import { LIMITS, byteLength, classifySize, formatBytes, shouldHighlight } from '../core/limits';
 import { Search, type SearchMatch } from '../core/search';
 import {
@@ -42,6 +42,7 @@ import {
   type JournalEntry,
   type SerializedDocument,
 } from '../core/session';
+import { fuzzyFilter } from '../core/fuzzy';
 import { nextGraphemeBoundary, previousGraphemeBoundary } from '../core/text';
 import { clear, debounce, el } from './dom';
 import { EditorView } from './editorView';
@@ -96,9 +97,11 @@ interface OpenDocument {
   indent: { indentUnit: string; insertSpaces: boolean };
   createdAt: number;
   cachedText: string;
-  lines: string[];
+  lines: LineSource;
   lineStarts: number[];
   bytes: number;
+  /** Lowest line touched since the last paint; drives highlight-cache invalidation. */
+  dirtyFromLine: number;
 }
 
 interface FindState {
@@ -330,7 +333,8 @@ export class App {
   private refreshCache(doc: OpenDocument): void {
     if (doc.cachedText === doc.doc.text) return;
     doc.cachedText = doc.doc.text;
-    doc.lines = doc.doc.lines;
+    // Lazy accessors: only the visible window is ever materialised.
+    doc.lines = { lineCount: doc.doc.lineCount, lineText: (index) => doc.doc.lineText(index) };
     doc.lineStarts = [...doc.doc.lineStarts];
     doc.bytes = byteLength(doc.doc.text);
   }
@@ -344,14 +348,13 @@ export class App {
     const language = this.languageOf(active);
     const bytes = active.bytes;
     const highlight =
-      this.settings.highlight &&
-      language.family !== 'plain' &&
-      shouldHighlight(bytes, active.lines.length);
+      this.settings.highlight && language.family !== 'plain' && shouldHighlight(bytes, active.doc.lineCount);
 
     this.view.render(
       {
         text: active.doc.text,
         lines: active.lines,
+        lineCount: active.doc.lineCount,
         lineStarts: active.lineStarts,
         selections: active.selections,
         language,
@@ -361,9 +364,11 @@ export class App {
         spellcheck: language.spellcheckDefault === true,
         matches: this.find.visible ? this.matches : [],
         activeMatch: this.find.visible ? this.find.index : -1,
+        dirtyFrom: active.dirtyFromLine,
       },
       options,
     );
+    active.dirtyFromLine = Number.MAX_SAFE_INTEGER;
 
     active.scrollTop = this.view.textarea.scrollTop;
     this.renderTabs();
@@ -563,9 +568,10 @@ export class App {
       indent: detectIndent(doc.text),
       createdAt: Date.now(),
       cachedText: '',
-      lines: [],
+      lines: { lineCount: 0, lineText: () => '' },
       lineStarts: [],
       bytes: 0,
+      dirtyFromLine: 0,
     };
     this.refreshCache(document_);
     this.documents.push(document_);
@@ -595,9 +601,10 @@ export class App {
       indent: detectIndent(doc.text),
       createdAt: serialized.modifiedAt || Date.now(),
       cachedText: '',
-      lines: [],
+      lines: { lineCount: 0, lineText: () => '' },
       lineStarts: [],
       bytes: 0,
+      dirtyFromLine: 0,
     };
     this.refreshCache(entry);
     this.documents.push(entry);
@@ -668,6 +675,8 @@ export class App {
       at: Date.now(),
     });
     active.doc = result.doc;
+    const dirtyLine = Math.min(...edits.map((edit) => active.doc.lineAt(Math.min(edit.from, edit.to))));
+    active.dirtyFromLine = Math.min(active.dirtyFromLine, Number.isFinite(dirtyLine) ? dirtyLine : 0);
     active.selections = dedupeSelections(selections);
     active.indent = detectIndent(active.doc.text);
     this.afterEdit();
@@ -916,6 +925,7 @@ export class App {
       return;
     }
     active.doc = result.doc;
+    active.dirtyFromLine = 0;
     active.selections = dedupeSelections(result.selections);
     this.afterEdit();
   }
@@ -929,6 +939,7 @@ export class App {
       return;
     }
     active.doc = result.doc;
+    active.dirtyFromLine = 0;
     active.selections = dedupeSelections(result.selections);
     this.afterEdit();
   }
@@ -1157,17 +1168,19 @@ export class App {
   private quickOpen(): void {
     const items: PaletteItem[] = this.documents.map((doc) => ({
       id: doc.id,
-      label: doc.name,
-      category: this.isDirty(doc) ? 'unsaved' : doc.path ? 'open' : 'open',
-      description: doc.path ?? undefined,
+      label: doc.path ?? doc.name,
+      category: this.isDirty(doc) ? 'unsaved' : 'open',
     }));
     this.palette.open({
       label: 'Open file',
       placeholder: 'Type a file name…',
-      filter: (query) =>
-        query.trim() === ''
-          ? items
-          : items.filter((item) => item.label.toLowerCase().includes(query.trim().toLowerCase())),
+      filter: (query) => {
+        if (query.trim() === '') return items;
+        return fuzzyFilter(items, query.trim(), (item) => item.label, 30).map((entry) => ({
+          ...entry.item,
+          positions: entry.positions,
+        }));
+      },
       onSelect: (item) => this.activate(item.id, { restoreScroll: true }),
     });
   }
@@ -1251,6 +1264,13 @@ export class App {
     if ((event.key === 'Home' || event.key === 'End') && !event.ctrlKey && !event.metaKey && !event.altKey) {
       event.preventDefault();
       this.smartHome(event.key === 'End', event.shiftKey);
+      return;
+    }
+
+    // `Shift+=` reports key === '+', which no combo string can express cleanly.
+    if ((event.ctrlKey || event.metaKey) && (event.key === '+' || event.key === '=')) {
+      event.preventDefault();
+      this.zoom(1);
       return;
     }
 
@@ -1349,6 +1369,7 @@ export class App {
     const inserted = value.slice(prefix, value.length - suffix);
     const applied = createEdits(active.doc, [{ from, to, text: inserted }]);
     active.doc = active.doc.replaceRange(from, to, inserted);
+    active.dirtyFromLine = Math.min(active.dirtyFromLine, active.doc.lineAt(from));
     active.selections = [clampSelection(this.view.selection, active.doc.length)];
     if (applied.some((edit) => edit.removed !== edit.text)) {
       active.history.push({

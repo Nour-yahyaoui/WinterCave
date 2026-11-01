@@ -7,9 +7,9 @@ export const LIMITS = {
   warnBytes: 5_000_000,
   /** Above this, refuse to open unless the user insists (read-only). */
   refuseBytes: 50_000_000,
-  /** Above this, syntax highlighting is switched off to keep keystrokes fast. */
-  highlightBytes: 2_000_000,
-  highlightLines: 20_000,
+  /** Highlighting is windowed, so these only guard pathological documents. */
+  highlightBytes: 10_000_000,
+  highlightLines: 200_000,
   /** Total budget for the crash-recovery journal (localStorage). */
   journalBytes: 2_000_000,
   journalEntries: 12,

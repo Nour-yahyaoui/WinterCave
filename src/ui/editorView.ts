@@ -1,7 +1,8 @@
 import {
+  HighlightCache,
   flattenTokens,
-  tokenizeLines,
   type LanguageDef,
+  type LineSource,
   type Token,
   type TokenType,
 } from '../core/language';
@@ -10,7 +11,9 @@ import { escapeHtml } from './dom';
 
 export interface RenderState {
   text: string;
-  lines: readonly string[];
+  /** Lazy line access — materializing every line per keystroke is O(document). */
+  lines: LineSource;
+  lineCount: number;
   lineStarts: readonly number[];
   selections: readonly Selection[];
   language: LanguageDef;
@@ -20,14 +23,19 @@ export interface RenderState {
   spellcheck: boolean;
   matches?: readonly { from: number; to: number }[] | undefined;
   activeMatch?: number;
+  /** First line touched by the last edit; lets the highlight cache stay warm. */
+  dirtyFrom?: number;
 }
 
-/** Above this the DOM overlay costs more than it gives; fall back to the textarea. */
-const PLAIN_MODE_LINES = 4000;
-const PLAIN_MODE_BYTES = 2_000_000;
+/** Above this many rows the overlay paints the viewport instead of the document. */
+const VIRTUALIZE_ABOVE = 300;
+const PLAIN_MODE_BYTES = 5_000_000;
+/** Wrapped layout cannot be virtualized, so long wrapped documents go native. */
+const PLAIN_MODE_WRAPPED_LINES = 1500;
 
-export function isPlainMode(state: Pick<RenderState, 'lines' | 'text'>): boolean {
-  return state.lines.length > PLAIN_MODE_LINES || state.text.length > PLAIN_MODE_BYTES;
+export function isPlainMode(state: Pick<RenderState, 'lineCount' | 'text' | 'wrap'>): boolean {
+  if (state.text.length > PLAIN_MODE_BYTES) return true;
+  return state.wrap && state.lineCount > PLAIN_MODE_WRAPPED_LINES;
 }
 
 interface LineMark {
@@ -40,6 +48,9 @@ interface LineMark {
  * The editing surface: a `textarea` for input, accessibility and IME, plus a
  * painted overlay behind it for syntax colours, multi-cursor decorations and
  * search highlights. Native caret handling is kept — no caret reimplementation.
+ *
+ * Only the visible window is tokenized and painted, so a keystroke costs the
+ * same whether the file is 40 lines or 40,000.
  */
 export class EditorView {
   readonly root: HTMLElement;
@@ -53,8 +64,12 @@ export class EditorView {
   private readonly verticalThumb: HTMLElement;
   private readonly horizontalTrack: HTMLElement;
   private readonly horizontalThumb: HTMLElement;
+  private readonly cache = new HighlightCache();
   private composing = false;
+  private state: RenderState | null = null;
+  private virtual = false;
   private lastRenderedText = '';
+  private repaintHandle: number | ReturnType<typeof setTimeout> | null = null;
 
   constructor(container: HTMLElement) {
     this.gutterInner = document.createElement('div');
@@ -108,7 +123,7 @@ export class EditorView {
     this.textarea.addEventListener('scroll', () => this.onScroll(), { passive: true });
     if (typeof ResizeObserver !== 'undefined') {
       new ResizeObserver(() => this.updateScrollbars()).observe(this.surface);
-    } else {
+    } else if (typeof window !== 'undefined') {
       window.addEventListener('resize', () => this.updateScrollbars());
     }
     this.bindScrollbars();
@@ -134,6 +149,9 @@ export class EditorView {
   }
 
   render(state: RenderState, options: { syncSelection?: boolean } = {}): void {
+    this.state = state;
+    if (state.dirtyFrom !== undefined) this.cache.invalidateFrom(state.dirtyFrom);
+
     const plain = isPlainMode(state);
     this.root.dataset['plain'] = plain ? 'true' : 'false';
     this.overlay.hidden = plain;
@@ -154,17 +172,11 @@ export class EditorView {
     this.paintGutter(state);
 
     if (options.syncSelection && !this.composing) {
-      const primary = primarySelection(state.selections);
-      this.applySelection(primary);
+      this.applySelection(primarySelection(state.selections));
       this.revealCaret(state);
     }
 
     this.onScroll();
-  }
-
-  /** Force the next render to rewrite the textarea even if the text looks equal. */
-  invalidateText(): void {
-    this.lastRenderedText = '';
   }
 
   private applySelection(selection: Selection): void {
@@ -185,18 +197,23 @@ export class EditorView {
     const line = lineForOffset(state.lineStarts, caret);
     const lineHeight = this.lineHeight();
     if (lineHeight <= 0) return;
+    const viewHeight = this.textarea.clientHeight;
+    if (viewHeight <= 0) return;
     const top = line * lineHeight;
     const bottom = top + lineHeight;
     const viewTop = this.textarea.scrollTop;
-    const viewBottom = viewTop + this.textarea.clientHeight - 16;
+    const viewBottom = viewTop + viewHeight - 16;
     if (top < viewTop) this.textarea.scrollTop = top;
-    else if (bottom > viewBottom) this.textarea.scrollTop = bottom - this.textarea.clientHeight + 16;
+    else if (bottom > viewBottom) this.textarea.scrollTop = bottom - viewHeight + 16;
   }
 
   private lineHeight(): number {
-    const raw = getComputedStyle(this.root).getPropertyValue('--line-height').trim();
-    const parsed = Number.parseFloat(raw);
-    return Number.isFinite(parsed) ? parsed : 21;
+    const computed =
+      typeof getComputedStyle === 'function'
+        ? getComputedStyle(this.root).getPropertyValue('--line-height').trim()
+        : '';
+    const parsed = Number.parseFloat(computed);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 21;
   }
 
   private onScroll(): void {
@@ -204,32 +221,73 @@ export class EditorView {
     this.overlayInner.style.transform = `translate(${-scrollLeft}px, ${-scrollTop}px)`;
     this.gutterInner.style.transform = `translateY(${-scrollTop}px)`;
     this.updateScrollbars();
+    if (this.virtual || this.gutterVisible()) this.scheduleRepaint();
+  }
+
+  private gutterVisible(): boolean {
+    return !this.gutter.hidden;
+  }
+
+  private scheduleRepaint(): void {
+    if (this.repaintHandle !== null) return;
+    const run = () => {
+      this.repaintHandle = null;
+      const state = this.state;
+      if (!state) return;
+      this.paintGutter(state);
+      if (this.virtual && !isPlainMode(state)) this.paintOverlay(state);
+    };
+    this.repaintHandle =
+      typeof requestAnimationFrame === 'function' ? requestAnimationFrame(run) : setTimeout(run, 16);
+  }
+
+  private viewportWindow(state: RenderState): { first: number; last: number } {
+    const lineHeight = this.lineHeight();
+    const total = state.lineCount;
+    if (state.wrap || total <= VIRTUALIZE_ABOVE) return { first: 0, last: total - 1 };
+    const viewHeight = this.textarea.clientHeight;
+    const visible = viewHeight > 0 ? Math.ceil(viewHeight / lineHeight) : 40;
+    const first = Math.max(0, Math.floor(this.textarea.scrollTop / lineHeight) - 6);
+    const last = Math.min(total - 1, first + visible + 12);
+    return { first, last };
   }
 
   private paintOverlay(state: RenderState): void {
     const primary = primarySelection(state.selections);
     const extras = state.selections.filter((selection) => selection !== primary);
     const matches = state.highlight ? (state.matches ?? []) : [];
-
-    const tokensByLine = state.highlight
-      ? tokenizeLines(state.lines, state.language)
-      : new Map<number, { tokens: Token[] }>();
-
-    const parts: string[] = [];
     const lineHeight = this.lineHeight();
     const activeLine = lineForOffset(state.lineStarts, primary.head);
+
+    this.virtual = !state.wrap && state.lineCount > VIRTUALIZE_ABOVE;
+    const { first, last } = this.viewportWindow(state);
+    const tokensByLine = state.highlight
+      ? this.cache.window(state.lines, state.language, first, last + 1)
+      : new Map<number, Token[]>();
+
+    const parts: string[] = [];
     if (!state.wrap) {
       parts.push(`<div class="active-line" style="top:${activeLine * lineHeight}px"></div>`);
     }
 
-    for (let index = 0; index < state.lines.length; index += 1) {
-      const line = state.lines[index] ?? '';
-      const lineStart = state.lineStarts[index] ?? 0;
-      const tokenized = tokensByLine.get(index);
-      const tokens = tokenized ? flattenTokens(line, tokenized.tokens) : [];
-      parts.push(this.renderLine(line, lineStart, tokens, extras, matches, state, activeLine === index));
+    if (this.virtual) {
+      parts.push(`<div class="overlay-spacer" style="position:relative;height:${state.lineCount * lineHeight}px">`);
     }
 
+    for (let index = first; index <= last; index += 1) {
+      const line = state.lines.lineText(index);
+      const lineStart = state.lineStarts[index] ?? 0;
+      const tokens = tokensByLine.get(index);
+      const flat = tokens ? flattenTokens(line, tokens) : [];
+      const rows = this.renderLine(line, lineStart, flat, extras, matches, state, index === activeLine);
+      parts.push(
+        this.virtual
+          ? rows.replace('<div class="line"', `<div class="line" style="position:absolute;top:${index * lineHeight}px;left:0;right:0"`)
+          : rows,
+      );
+    }
+
+    if (this.virtual) parts.push('</div>');
     this.overlayInner.innerHTML = parts.join('');
   }
 
@@ -311,7 +369,6 @@ export class EditorView {
       html += classes.length > 0 ? `<span class="${classes.join(' ')}">${text}</span>` : text;
     }
 
-    // Trailing carets (end of line / empty line) and a stable wrap anchor.
     while (caretCursor < sortedCarets.length) {
       html += '<span class="cursor"></span>';
       caretCursor += 1;
@@ -327,19 +384,18 @@ export class EditorView {
     if (hide) return;
 
     const lineHeight = this.lineHeight();
+    const viewHeight = this.textarea.clientHeight;
+    const visible = viewHeight > 0 ? Math.ceil(viewHeight / lineHeight) : 30;
     const first = Math.max(0, Math.floor(this.textarea.scrollTop / lineHeight) - 1);
-    const visible = Math.ceil(this.textarea.clientHeight / lineHeight) + 3;
-    const last = Math.min(state.lines.length - 1, first + visible);
+    const last = Math.min(state.lineCount - 1, first + visible + 3);
     const activeLine = lineForOffset(state.lineStarts, primarySelection(state.selections).head);
-    const width = String(state.lines.length).length;
+    const width = String(state.lineCount).length;
 
     const parts: string[] = [];
     for (let index = first; index <= last; index += 1) {
       const label = String(index + 1).padStart(width, ' ');
       const active = index === activeLine;
-      parts.push(
-        `<div class="gutter-line" data-active="${active ? 'true' : 'false'}">${label}</div>`,
-      );
+      parts.push(`<div class="gutter-line" data-active="${active ? 'true' : 'false'}">${label}</div>`);
     }
     this.gutterInner.innerHTML = parts.join('');
     this.gutterInner.style.paddingTop = `${first * lineHeight}px`;
@@ -351,7 +407,7 @@ export class EditorView {
     const needsVertical = scrollHeight > clientHeight + 1;
     this.verticalTrack.style.display = needsVertical ? '' : 'none';
     if (needsVertical) {
-      const trackHeight = this.verticalTrack.clientHeight;
+      const trackHeight = this.verticalTrack.clientHeight || clientHeight;
       const thumbHeight = Math.max(24, (clientHeight / scrollHeight) * trackHeight);
       const maxTop = Math.max(0, trackHeight - thumbHeight);
       const ratio = scrollTop / Math.max(1, scrollHeight - clientHeight);
@@ -362,7 +418,7 @@ export class EditorView {
     const needsHorizontal = scrollWidth > clientWidth + 1;
     this.horizontalTrack.style.display = needsHorizontal ? '' : 'none';
     if (needsHorizontal) {
-      const trackWidth = this.horizontalTrack.clientWidth;
+      const trackWidth = this.horizontalTrack.clientWidth || clientWidth;
       const thumbWidth = Math.max(24, (clientWidth / scrollWidth) * trackWidth);
       const maxLeft = Math.max(0, trackWidth - thumbWidth);
       const ratio = scrollLeft / Math.max(1, scrollWidth - clientWidth);

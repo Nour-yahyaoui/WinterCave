@@ -300,3 +300,60 @@ describe('durability', () => {
     expect(host.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('');
   });
 });
+
+describe('large documents', () => {
+  const bigText = Array.from({ length: 5000 }, (_, index) => `export const value${index} = ${index}; // line`).join('\n');
+
+  const paste = (textarea: HTMLTextAreaElement, text: string) => {
+    textarea.dispatchEvent(
+      new ClipboardEvent('paste', {
+        clipboardData: { getData: () => text } as unknown as DataTransfer,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  };
+
+  /** Markdown wraps by default; switch to a code language to exercise virtualization. */
+  const switchToTypeScript = (host: HTMLElement) => {
+    const languageButton = [...host.querySelectorAll<HTMLButtonElement>('.statusbar button')].find(
+      (button) => button.textContent === 'Markdown',
+    );
+    languageButton?.click();
+    const row = [...document.querySelectorAll<HTMLElement>('.dialog-item')].find(
+      (item) => item.querySelector('.dialog-item-title')?.textContent === 'TypeScript',
+    );
+    row?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+  };
+
+  it('paints only the viewport of a huge file', () => {
+    const { textarea, host } = boot();
+    switchToTypeScript(host);
+    paste(textarea, bigText);
+    expect(textarea.value.length).toBe(bigText.length);
+    const rows = host.querySelectorAll('.overlay .line');
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.length).toBeLessThan(200);
+    expect(host.querySelector('.overlay-spacer')).not.toBeNull();
+  });
+
+  it('still types and undoes correctly in a huge file', () => {
+    const { textarea, type, press, host } = boot();
+    switchToTypeScript(host);
+    paste(textarea, bigText);
+    type('X');
+    expect(textarea.value.endsWith('X')).toBe(true);
+    press('z', { ctrlKey: true });
+    expect(textarea.value).toBe(bigText);
+  });
+
+  it('falls back to the plain textarea for very long wrapped documents', () => {
+    const { textarea } = boot();
+    paste(textarea, bigText);
+    // Markdown wraps by default, and 5000 wrapped lines cannot be virtualized.
+    const overlay = document.querySelector<HTMLElement>('.overlay');
+    expect(overlay?.hidden).toBe(true);
+    expect(textarea.value.length).toBe(bigText.length);
+    expect(textarea.dataset['wrap']).toBe('true');
+  });
+});
