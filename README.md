@@ -71,6 +71,21 @@ writes the file and redirects back to it. The editor page is rendered by the
 server (`src/ui.rs`), so it is usable in any browser, including one with scripts
 off.
 
+## Landing page
+
+`site/` is the static page for **wintercave.vercel.app**: one `index.html` and one
+`styles.css`, no build step, no framework, no analytics. It documents what the
+project is, what the five editor surfaces do, how to run it and where the edges
+are. It deliberately does not host the editor — the editor is a localhost
+program.
+
+```bash
+python3 -m http.server 3000 --directory site   # look at it
+```
+
+Vercel project settings: framework *Other*, no build command, output directory
+`site`.
+
 ## Architecture
 
 ```
