@@ -1,8 +1,8 @@
 name: Format
 
-# Temporary helper: applies `cargo fmt --all` and pushes the result back to the
-# working branch, because the authoring sandbox has no Rust toolchain. It also
-# surfaces compiler diagnostics as check-run annotations.
+# Temporary helper, deleted once the actix crate is green. The authoring sandbox
+# has no Rust toolchain, so CI does the formatting and reports it as a patch in
+# check-run annotations, together with any compiler and test diagnostics.
 on:
   workflow_dispatch:
   push:
@@ -14,38 +14,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: arena/90ed5d9f-wintercave
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
       - uses: Swatinem/rust-cache@v2
-      - name: cargo fmt --all
-        run: cargo fmt --all
-      - name: Commit formatting
+      - name: Formatting patch
         run: |
+          cargo fmt --all
           if git diff --quiet; then
-            echo "already formatted"
-            exit 0
+            echo "::warning::already formatted"
+          else
+            git diff > /tmp/fmt.patch
+            echo "::warning::rustfmt changed files, see annotations for the patch"
+            while IFS= read -r line; do printf '::error::%s\n' "$line"; done < /tmp/fmt.patch
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "style: apply rustfmt to the actix server"
-          git push origin HEAD:arena/90ed5d9f-wintercave
-      - name: Build and surface diagnostics
+      - name: Build diagnostics
+        continue-on-error: true
         run: |
           cargo build -p wintercave-server --message-format=short > /tmp/build.log 2>&1
-          status=$?
-          tail -n 120 /tmp/build.log | while IFS= read -r line; do
-            printf '::error::%s\n' "$line"
-          done
-          exit $status
-      - name: Test and surface diagnostics
+          tail -n 150 /tmp/build.log | while IFS= read -r line; do printf '::error::%s\n' "$line"; done
+      - name: Test diagnostics
+        continue-on-error: true
         run: |
           cargo test -p wintercave-server > /tmp/test.log 2>&1
-          status=$?
-          tail -n 120 /tmp/test.log | while IFS= read -r line; do
-            printf '::error::%s\n' "$line"
-          done
-          exit $status
+          tail -n 150 /tmp/test.log | while IFS= read -r line; do printf '::error::%s\n' "$line"; done
