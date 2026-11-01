@@ -7,6 +7,7 @@ on:
 
 jobs:
   verify:
+    name: Web shell (typecheck, tests, build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,3 +22,28 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+
+  rust:
+    name: Rust core (tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: Format (applied, diff shown)
+        run: |
+          cargo fmt --all
+          git --no-pager diff --stat
+      - name: Tests
+        run: cargo test --workspace --all-targets
+      - name: Upload formatted sources
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-sources
+          path: |
+            crates/
+            Cargo.lock
+          if-no-files-found: ignore
