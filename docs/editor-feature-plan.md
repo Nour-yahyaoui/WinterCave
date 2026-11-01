@@ -1,3 +1,8 @@
+> **Status note.** This is the original plan for the editor, written for the
+> first TypeScript/Vite shell. The shell has since been replaced by the
+> server-rendered Rust one in `crates/wintercave-server`; the feature list,
+> the behaviour rules and the limits below are still the reference.
+
 # WinterCave — Text Editor Feature Plan
 
 > Status: planning draft · No code written · Scope: features, priorities, UX decisions, risks, roadmap
