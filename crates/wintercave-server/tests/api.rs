@@ -797,3 +797,239 @@ async fn preflight_answers_options_with_cors_headers() {
         Some("GET, PUT, POST, DELETE, OPTIONS")
     );
 }
+
+// ---------------------------------------------------------------------------
+// folders, themes and quick open
+// ---------------------------------------------------------------------------
+
+#[actix_web::test]
+async fn page_renders_the_folder_theme_and_completion_controls() {
+    let fixture = Fixture::new("page-controls");
+    let app = service!(fixture, false);
+
+    let response = test::call_service(&app, test::TestRequest::get().uri("/").to_request()).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = text_body(response).await;
+
+    assert!(body.contains("Open file…"), "no quick open button");
+    assert!(body.contains("Open folder…"), "no folder button");
+    assert!(body.contains("id=\"theme-toggle\""), "no theme toggle");
+    assert!(body.contains("id=\"completion\""), "no completion listbox");
+    assert!(body.contains("id=\"quick-open\""), "no quick open dialog");
+    assert!(body.contains("id=\"folder-browser\""), "no folder dialog");
+    // The theme is resolved before the stylesheet paints, from storage or the
+    // operating system: no flash of the wrong palette.
+    assert!(body.contains("localStorage.getItem('wintercave.theme')"));
+    assert!(body.contains("prefers-color-scheme: light"));
+    assert!(body.contains("<meta name=\"color-scheme\" content=\"dark light\">"));
+}
+
+#[actix_web::test]
+async fn page_lists_a_subfolder_and_opens_its_first_file() {
+    let fixture = Fixture::new("page-dir");
+    let app = service!(fixture, false);
+
+    let response = test::call_service(
+        &app,
+        test::TestRequest::get().uri("/?dir=sub").to_request(),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = text_body(response).await;
+
+    assert!(body.contains("data-dir=\"sub\""));
+    assert!(
+        body.contains("data-path=\"sub/deep.txt\""),
+        "the first readable file in the folder should open"
+    );
+    // Breadcrumb back to the workspace root, and the folder itself as a link.
+    assert!(body.contains("aria-label=\"Folders\""));
+    assert!(body.contains("href=\"/?dir=sub\""));
+}
+
+#[actix_web::test]
+async fn page_reports_a_missing_folder() {
+    let fixture = Fixture::new("page-dir-missing");
+    let app = service!(fixture, false);
+
+    let response = test::call_service(
+        &app,
+        test::TestRequest::get().uri("/?dir=nope").to_request(),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let body = text_body(response).await;
+    assert!(body.contains("Back to the editor"));
+}
+
+// ---------------------------------------------------------------------------
+// completion
+// ---------------------------------------------------------------------------
+
+#[actix_web::test]
+async fn completion_suggests_buffer_words_and_keywords() {
+    let fixture = Fixture::new("complete");
+    let app = service!(fixture, false);
+
+    let text = "let counter = 1;\nco";
+    let payload = serde_json::json!({
+        "text": text,
+        "offset": text.len(),
+        "language": "rust",
+    })
+    .to_string();
+
+    let response = test::call_service(
+        &app,
+        test::TestRequest::post()
+            .uri("/api/complete")
+            .set_payload(payload)
+            .to_request(),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = json_body(response).await;
+    assert_eq!(body["language"], Value::String("rust".to_string()));
+    // "co" starts at 17 in the sample, and the caret is the payload's offset.
+    assert_eq!(body["from"], serde_json::json!(17));
+    assert_eq!(body["to"], serde_json::json!(19));
+
+    let labels: Vec<&str> = body["items"]
+        .as_array()
+        .expect("items")
+        .iter()
+        .map(|item| item["label"].as_str().unwrap_or(""))
+        .collect();
+    assert!(labels.contains(&"counter"), "{labels:?}");
+    // Rust knows `const`, and the page must be able to label it as a keyword.
+    assert!(labels.contains(&"const"), "{labels:?}");
+    assert!(body["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| item["kind"] == Value::String("keyword".to_string())));
+}
+
+#[actix_web::test]
+async fn completion_counts_utf16_offsets_like_the_dom() {
+    let fixture = Fixture::new("complete-utf16");
+    let app = service!(fixture, false);
+
+    let text = "counter_total = \"🌍\";\ncounter_";
+    let utf16_length: usize = text.encode_utf16().count();
+    let payload = serde_json::json!({
+        "text": text,
+        "offset": utf16_length,
+        "language": "rust",
+    })
+    .to_string();
+
+    let response = test::call_service(
+        &app,
+        test::TestRequest::post()
+            .uri("/api/complete")
+            .set_payload(payload)
+            .to_request(),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = json_body(response).await;
+    // "counter_" is eight UTF-16 units long, astral plane or not.
+    assert_eq!(body["from"], serde_json::json!(utf16_length - 8));
+    assert_eq!(body["to"], serde_json::json!(utf16_length));
+    let labels: Vec<&str> = body["items"]
+        .as_array()
+        .expect("items")
+        .iter()
+        .map(|item| item["label"].as_str().unwrap_or(""))
+        .collect();
+    assert!(labels.contains(&"counter_total"), "{labels:?}");
+}
+
+#[actix_web::test]
+async fn completion_refuses_enormous_documents() {
+    let fixture = Fixture::new("complete-large");
+    let app = service!(fixture, false);
+
+    let text = "a".repeat(500_000);
+    let payload = serde_json::json!({ "text": text, "offset": 10 }).to_string();
+    let response = test::call_service(
+        &app,
+        test::TestRequest::post()
+            .uri("/api/complete")
+            .set_payload(payload)
+            .to_request(),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+}
+
+// ---------------------------------------------------------------------------
+// quick open
+// ---------------------------------------------------------------------------
+
+#[actix_web::test]
+async fn find_ranks_files_below_the_workspace() {
+    let fixture = Fixture::new("find");
+    let app = service!(fixture, false);
+
+    let response = test::call_service(
+        &app,
+        test::TestRequest::post()
+            .uri("/api/find")
+            .set_payload(r#"{"query":"deep","dir":""}"#)
+            .to_request(),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = json_body(response).await;
+    let items = body["items"].as_array().expect("items");
+    assert_eq!(items.len(), 1, "{items:?}");
+    assert_eq!(items[0]["path"], Value::String("sub/deep.txt".to_string()));
+}
+
+#[actix_web::test]
+async fn find_stays_inside_the_folder_it_is_given() {
+    let fixture = Fixture::new("find-sub");
+    let app = service!(fixture, false);
+
+    let response = test::call_service(
+        &app,
+        test::TestRequest::post()
+            .uri("/api/find")
+            .set_payload(r#"{"query":"","dir":"sub"}"#)
+            .to_request(),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = json_body(response).await;
+    let items = body["items"].as_array().expect("items");
+    assert!(!items.is_empty());
+    assert!(items
+        .iter()
+        .all(|item| item["path"].as_str().unwrap_or("").starts_with("sub/")));
+}
+
+#[actix_web::test]
+async fn find_refuses_a_folder_outside_the_workspace() {
+    let fixture = Fixture::new("find-escape");
+    let app = service!(fixture, false);
+
+    let response = test::call_service(
+        &app,
+        test::TestRequest::post()
+            .uri("/api/find")
+            .set_payload(r#"{"query":"","dir":"../.."}"#)
+            .to_request(),
+    )
+    .await;
+    assert!(
+        response.status().is_client_error(),
+        "expected a refusal, got {}",
+        response.status()
+    );
+}

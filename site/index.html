@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WinterCave — a text editor you run, not a service you join</title>
+<meta name="description" content="WinterCave is one Rust program: an actix-web server that renders a text editor, highlights it with its own tokenizer, completes words locally, and writes files atomically inside a folder you choose. No Node, no npm, no build step.">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#0b1418">
+<meta property="og:type" content="website">
+<meta property="og:title" content="WinterCave — a text editor you run">
+<meta property="og:description" content="One Rust binary: server-rendered editor, Rust tokenizer, local word completion, atomic writes inside a folder you choose.">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230b1418'/%3E%3Cpath d='M6 24c3-6 6-9 10-9s7 3 10 9' fill='none' stroke='%2358b7cc' stroke-width='1.6'/%3E%3Cpath d='M4 27c4-8 8-12 12-12s8 4 12 12' fill='none' stroke='%231c2e36' stroke-width='1.6'/%3E%3C/svg%3E">
+<script>
+  /* Resolve the theme before the stylesheet paints: saved choice, else the OS.
+     This is the only blocking script on the page, and it is 200 bytes. */
+  (function () {
+    try {
+      var stored = localStorage.getItem('wintercave.theme');
+      var system = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      var theme = stored === 'light' || stored === 'dark' ? stored : system;
+      document.documentElement.dataset.theme = theme;
+    } catch (error) {
+      /* Private mode: fall through to the CSS default. */
+    }
+  })();
+</script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top" id="top">
+  <a class="wordmark" href="#top">
+    <svg class="mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+      <path d="M5 25c3.4-7 6.8-10.5 11-10.5S23.4 18 27 25" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M8 25c2.2-4.4 4.6-6.6 8-6.6s5.7 2.2 8 6.6" fill="none" stroke="currentColor" stroke-width="1" opacity="0.5"/>
+      <circle cx="16" cy="7" r="2" fill="currentColor"/>
+    </svg>
+    <span class="name">WinterCave</span>
+    <span class="ver">0.3.0</span>
+  </a>
+
+  <nav class="nav" aria-label="Sections">
+    <a href="#what">What it is</a>
+    <a href="#screen">On screen</a>
+    <a href="#features">Features</a>
+    <a href="#run">Run it</a>
+    <a href="#limits">Limits</a>
+  </nav>
+
+  <div class="top-actions">
+    <a class="source" href="https://github.com/Nour-yahyaoui/WinterCave">Source<span aria-hidden="true"> ↗</span></a>
+    <button class="theme" id="theme-toggle" type="button" aria-pressed="false" aria-label="Toggle the colour theme" title="Switch between the dark and light theme">
+      <span id="theme-label">Light</span>
+    </button>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ================= hero ================= -->
+  <section class="hero" aria-labelledby="hero-title">
+    <svg class="contour" viewBox="0 0 600 420" aria-hidden="true" focusable="false" preserveAspectRatio="xMidYMid slice">
+      <g fill="none" stroke="currentColor" stroke-width="1">
+        <path d="M-20 402c60-38 96-96 150-96s84 34 132 20 72-66 122-78 96 6 136-26 60-44 100-52"/>
+        <path d="M-20 380c58-34 92-88 146-88s82 32 128 18 72-62 120-74 94 6 134-24 58-42 96-50"/>
+        <path d="M-20 358c56-30 88-80 142-80s80 30 124 16 72-58 118-70 92 6 132-22 56-40 92-48"/>
+        <path d="M-20 336c54-26 84-72 138-72s78 28 120 14 72-54 116-66 90 6 130-20 54-38 88-46"/>
+        <path d="M-20 314c52-22 80-64 134-64s76 26 116 12 72-50 114-62 88 6 128-18 52-36 84-44"/>
+        <path d="M-20 292c50-18 76-56 130-56s74 24 112 10 72-46 112-58 86 6 126-16 50-34 80-42"/>
+        <path d="M-20 270c48-14 72-48 126-48s72 22 108 8 72-42 110-54 84 6 124-14 48-32 76-40"/>
+        <path d="M-20 248c46-10 68-40 122-40s70 20 104 6 72-38 108-50 82 6 122-12 46-30 72-38"/>
+        <path d="M120 402c14-26 26-46 44-46s28 14 40 6 18-22 30-26 24 2 34-8 14-14 24-18"/>
+        <path d="M330 402c18-32 32-58 54-58s34 18 50 8 24-28 40-34 30 2 44-10 18-18 30-24"/>
+      </g>
+      <g fill="currentColor" font-family="ui-monospace, monospace" font-size="9" opacity="0.75">
+        <text x="34" y="30">60°N</text>
+        <text x="34" y="404">34°S</text>
+      </g>
+    </svg>
+
+    <div class="hero-copy">
+      <p class="eyebrow">Rust 0.3.0 · local · no npm</p>
+      <h1 id="hero-title">A text editor you <em>run</em>,<br> not a service you join.</h1>
+      <p class="lede">
+        WinterCave is one Rust program. It serves the editor page, tokenizes the
+        file with its own engine, suggests the word you are half-way through
+        typing from the file itself, and writes the result atomically — inside a
+        folder you choose, on a port you choose, with no account anywhere.
+      </p>
+
+      <div class="cta">
+        <a class="button primary" href="#run">Run it locally</a>
+        <a class="button" href="https://github.com/Nour-yahyaoui/WinterCave">Read the source</a>
+      </div>
+
+      <dl class="legend" aria-label="At a glance">
+        <div><dt>Engine</dt><dd>wintercave-core</dd></div>
+        <div><dt>Shell</dt><dd>wintercave-server</dd></div>
+        <div><dt>Build step</dt><dd>none</dd></div>
+        <div><dt>Listen</dt><dd>localhost</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <!-- ================= what it is ================= -->
+  <section class="band" id="what" aria-labelledby="what-title">
+    <header class="band-head">
+      <p class="eyebrow">What it is</p>
+      <h2 id="what-title">Two crates, one process</h2>
+      <p class="sub">
+        The engine knows nothing about the web; the server knows nothing about
+        tokenizing. That split is the whole architecture, and it is why the same
+        editor could later drive a native window without rewriting the rules.
+      </p>
+    </header>
+
+    <div class="split">
+      <article class="card">
+        <p class="card-label">crates/wintercave-core</p>
+        <h3>The engine</h3>
+        <p>
+          An immutable document model, applied edits, undo history, search,
+          multi-cursor selection, smart editing (pairs, indentation, comments),
+          the keymap, the subsequence matcher, and the tokenizer for twelve
+          languages. No DOM, no filesystem, no async runtime.
+        </p>
+        <ul class="ticks">
+          <li>Byte offsets, boundary-checked — never a split emoji</li>
+          <li>One <code>#[test]</code> set per rule, and they are the specification</li>
+          <li>Also compiled to WebAssembly, kept working, loaded by nothing</li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <p class="card-label">crates/wintercave-server</p>
+        <h3>The shell</h3>
+        <p>
+          One actix-web program. It renders the page as HTML, embeds the
+          stylesheet and the one small script, and owns every byte of I/O:
+          reads, writes, atomic replace, and a file API confined to
+          <code>--root</code>.
+        </p>
+        <ul class="ticks">
+          <li>Atomic writes: temp file beside the target, fsync, rename</li>
+          <li><code>..</code>, absolute paths and NUL bytes rejected before disk</li>
+          <li>Works with JavaScript off — a plain form posts the buffer</li>
+        </ul>
+      </article>
+    </div>
+
+    <div class="routes">
+      <p class="card-label">The whole API</p>
+      <ul class="route-list">
+        <li><code>GET /</code><span>the editor, server-rendered</span></li>
+        <li><code>GET /?dir=</code><span>a folder: breadcrumb, folders, files</span></li>
+        <li><code>GET /?path=</code><span>a file, opened</span></li>
+        <li><code>POST /save?path=</code><span>the no-JavaScript form save</span></li>
+        <li><code>POST /api/highlight</code><span>text in, tokens out</span></li>
+        <li><code>POST /api/complete</code><span>caret in, suggestions out</span></li>
+        <li><code>POST /api/find</code><span>quick open, ranked</span></li>
+        <li><code>GET /api/files</code> <code>/api/tree</code> <code>/api/health</code><span>read, list, report</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ================= on screen ================= -->
+  <section class="band" id="screen" aria-labelledby="screen-title">
+    <header class="band-head">
+      <p class="eyebrow">On screen</p>
+      <h2 id="screen-title">The page, without the marketing</h2>
+      <p class="sub">
+        This is the editor as the server renders it: a folder legend on the left,
+        the terrain on the right, the caret's position in the bottom left. Pick a
+        feature below and the matching region is marked.
+      </p>
+    </header>
+
+    <div class="screen-grid">
+      <div class="mock" id="mock" aria-label="Diagram of the WinterCave editor page" role="img">
+        <div class="mock-side">
+          <div class="mock-brand">WinterCave<span>0.3.0</span></div>
+          <div class="mock-actions">
+            <span class="mock-action">Open file…<kbd>⌘P</kbd></span>
+            <span class="mock-action">Open folder…</span>
+          </div>
+          <div class="mock-crumbs"><a href="#screen">wintercave</a> <span aria-hidden="true">/</span> engine</div>
+          <ul class="mock-files">
+            <li class="dir up"><span aria-hidden="true">../</span></li>
+            <li class="dir">src/</li>
+            <li class="dir">tests/</li>
+            <li class="file">Cargo.toml</li>
+            <li class="file current">complete.rs</li>
+            <li class="file">language.rs</li>
+            <li class="file">fuzzy.rs</li>
+          </ul>
+          <div class="mock-root">/home/you/wintercave</div>
+          <div class="mock-hint">highlighting, completion and search run in Rust</div>
+        </div>
+
+        <div class="mock-pane">
+          <div class="mock-bar">
+            <span class="mock-name">complete.rs</span>
+            <span class="mock-lang">rust</span>
+            <span class="mock-theme">Light</span>
+          </div>
+          <pre class="mock-code"><code><span class="c">// Candidates are the language's keywords plus the buffer's own words.</span>
+<span class="k">pub fn</span> <span class="f">complete</span>(text: &amp;<span class="t">str</span>, caret: <span class="t">usize</span>, limit: <span class="t">usize</span>)
+    -&gt; (<span class="t">usize</span>, <span class="t">Vec</span>&lt;<span class="t">Completion</span>&gt;)
+{
+    <span class="k">let</span> (start, prefix) = <span class="f">word_at</span>(text, caret);
+    <span class="k">if</span> prefix.<span class="f">is_empty</span>() { <span class="k">return</span> (start, <span class="t">Vec</span>::<span class="f">new</span>()); }
+
+    <span class="k">let</span> <span class="k">mut</span> candidates = <span class="t">BTreeMap</span>::<span class="f">new</span>();
+    <span class="k">for</span> keyword <span class="k">in</span> language.keywords {
+        candidates.<span class="f">insert</span>(keyword, <span class="t">CompletionKind</span>::<span class="n">Keyword</span>);
+    }
+    candidates.<span class="f">entry</span>(<span class="s">"counter_total"</span>)
+        .<span class="f">or_insert</span>(<span class="t">CompletionKind</span>::<span class="n">Word</span>);<span class="caret">▏</span></code></pre>
+          <ul class="mock-pop" aria-hidden="true">
+            <li class="on"><span>counter_total</span><span class="kind">word</span></li>
+            <li><span>const</span><span class="kind">keyword</span></li>
+            <li><span>continue</span><span class="kind">keyword</span></li>
+            <li><span>caret</span><span class="kind">word</span></li>
+          </ul>
+          <div class="mock-status">
+            <span>saved</span><span>41:23</span><span>rust</span>
+            <span class="keys">⌘P open file · ⌘S save · ⌘Space complete</span>
+          </div>
+        </div>
+      </div>
+
+      <ul class="focus-list" aria-label="Features on screen">
+        <li>
+          <button type="button" data-focus="folder" aria-pressed="false">
+            <span class="num">01</span>
+            <span class="label">Open folder</span>
+            <span class="why">Breadcrumb, folders as links, <code>..</code> to climb back to the root.</span>
+          </button>
+        </li>
+        <li>
+          <button type="button" data-focus="file" aria-pressed="false">
+            <span class="num">02</span>
+            <span class="label">Open file</span>
+            <span class="why"><kbd>⌘P</kbd> ranks every file below the folder you are in.</span>
+          </button>
+        </li>
+        <li>
+          <button type="button" data-focus="theme" aria-pressed="false">
+            <span class="num">03</span>
+            <span class="label">Light &amp; dark</span>
+            <span class="why">Saved choice, else the system's. Applied before first paint.</span>
+          </button>
+        </li>
+        <li>
+          <button type="button" data-focus="highlight" aria-pressed="false">
+            <span class="num">04</span>
+            <span class="label">Highlighting</span>
+            <span class="why">Tokens come from the Rust engine, 120 ms after you stop.</span>
+          </button>
+        </li>
+        <li>
+          <button type="button" data-focus="complete" aria-pressed="false">
+            <span class="num">05</span>
+            <span class="label">Completion</span>
+            <span class="why"><kbd>↑</kbd><kbd>↓</kbd> to choose, <kbd>Tab</kbd> to accept. No model involved.</span>
+          </button>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ================= features ================= -->
+  <section class="band" id="features" aria-labelledby="features-title">
+    <header class="band-head">
+      <p class="eyebrow">Features</p>
+      <h2 id="features-title">Five things, honestly described</h2>
+    </header>
+
+    <ul class="features">
+      <li class="feature">
+        <p class="num">01</p>
+        <h3>Open folder</h3>
+        <p>
+          <code>GET /?dir=sub</code> renders that folder: a breadcrumb, the
+          folders as links, the files as links, <code>..</code> to go up. No
+          client router, no state to lose — a folder is a URL.
+        </p>
+        <p class="hint"><kbd>⌘⇧O</kbd> opens the folder browser</p>
+      </li>
+      <li class="feature">
+        <p class="num">02</p>
+        <h3>Open file</h3>
+        <p>
+          Quick open searches the whole workspace through
+          <code>POST /api/find</code>, ranked by the engine's subsequence
+          matcher. The walk is bounded: six levels, four thousand entries.
+        </p>
+        <p class="hint"><kbd>⌘P</kbd> to open, <kbd>↑</kbd><kbd>↓</kbd> to pick</p>
+      </li>
+      <li class="feature">
+        <p class="num">03</p>
+        <h3>Light and dark</h3>
+        <p>
+          One token set, two palettes. The choice is stored in
+          <code>localStorage</code>; when there is none the page follows
+          <code>prefers-color-scheme</code>. An inline script applies it before
+          the stylesheet paints, so the wrong theme never flashes.
+        </p>
+        <p class="hint">Toggle in the header, arrow keys work</p>
+      </li>
+      <li class="feature">
+        <p class="num">04</p>
+        <h3>Highlighting</h3>
+        <p>
+          The tokenizer is Rust, in the engine, and it is tested per language.
+          The page paints the returned spans on a layer behind a real
+          <code>textarea</code>, so the caret, IME and screen readers stay the
+          browser's job. Above 400 KB it stops rather than lying about latency.
+        </p>
+        <p class="hint">12 languages · 400 KB ceiling</p>
+      </li>
+      <li class="feature">
+        <p class="num">05</p>
+        <h3>Completion</h3>
+        <p>
+          Keywords, constants and the identifiers already in the buffer, ranked
+          prefix-first then by subsequence. It runs in the same process that
+          writes the file, so there is no model, no network and no account in
+          the loop.
+        </p>
+        <p class="hint"><kbd>⌘Space</kbd> asks explicitly</p>
+      </li>
+    </ul>
+  </section>
+
+  <!-- ================= run ================= -->
+  <section class="band" id="run" aria-labelledby="run-title">
+    <header class="band-head">
+      <p class="eyebrow">Run it</p>
+      <h2 id="run-title">Two commands, a localhost tab</h2>
+      <p class="sub">
+        You need Rust. You do not need Node, npm, Docker, or an API key.
+      </p>
+    </header>
+
+    <div class="run-grid">
+      <div class="terminal">
+        <div class="terminal-bar">
+          <span>bash</span>
+          <button type="button" class="copy" id="copy-run" data-copy="cargo run -p wintercave-server -- --port 4173 --root .">Copy</button>
+        </div>
+        <pre><code><span class="prompt">$</span> cargo run -p wintercave-server -- --port 4173 --root .
+<span class="dim">  wintercave-server 0.3.0</span>
+<span class="dim">  root: /home/you/project</span>
+<span class="dim">  listening on http://0.0.0.0:4173</span></code></pre>
+      </div>
+
+      <div class="run-notes">
+        <p>
+          Open <code>http://localhost:4173</code>. The left column is the
+          workspace, the right one is the editor. <kbd>⌘S</kbd> saves;
+          <kbd>⌘P</kbd> opens a file; the theme button is in the header.
+        </p>
+        <ul class="ticks">
+          <li><code>--root &lt;dir&gt;</code> the only folder it may touch</li>
+          <li><code>--read-only</code> open files, refuse every write</li>
+          <li><code>--host 127.0.0.1</code> stay off the network entirely</li>
+        </ul>
+        <p class="fine">
+          It binds <code>0.0.0.0</code> by default, like most dev servers. There
+          is no auth and no TLS, so pass <code>--host 127.0.0.1</code> on a
+          shared machine.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= limits ================= -->
+  <section class="band" id="limits" aria-labelledby="limits-title">
+    <header class="band-head">
+      <p class="eyebrow">Limits</p>
+      <h2 id="limits-title">What it deliberately does not do</h2>
+      <p class="sub">
+        A tool is easier to trust when it says where the edges are. These are
+        the real ones, at 0.3.0.
+      </p>
+    </header>
+
+    <div class="limits">
+      <table>
+        <caption class="visually-hidden">Known limitations of WinterCave 0.3.0</caption>
+        <thead>
+          <tr><th scope="col">Limit</th><th scope="col">Why, and what to do</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">No auth, no TLS</th>
+            <td>A local tool, not a hosted one. Bind <code>127.0.0.1</code> or keep it behind your own proxy.</td>
+          </tr>
+          <tr>
+            <th scope="row">One file at a time</th>
+            <td>No tab strip; opening a file is a page load. The folder browser walks one level at a time.</td>
+          </tr>
+          <tr>
+            <th scope="row">Highlighting is a round trip</th>
+            <td>Typing is instant — it is a textarea. Colours arrive ~120 ms later, and stop working above 400 KB.</td>
+          </tr>
+          <tr>
+            <th scope="row">Completion is local</th>
+            <td>Keywords, constants and words already in the file. No language server, no type inference, no model.</td>
+          </tr>
+          <tr>
+            <th scope="row">Quick open is bounded</th>
+            <td>Six levels and four thousand entries per search. It is a convenience, not an indexer.</td>
+          </tr>
+          <tr>
+            <th scope="row">Multi-cursor and find/replace</th>
+            <td>Implemented and tested in the engine, not yet wired to this page. The engine is the spec.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <div class="foot-brand">
+    <span class="wordmark-small">WinterCave</span>
+    <span class="ver">0.3.0</span>
+  </div>
+  <nav aria-label="Elsewhere">
+    <a href="https://github.com/Nour-yahyaoui/WinterCave">Repository</a>
+    <a href="https://github.com/Nour-yahyaoui/WinterCave/blob/main/README.md">README</a>
+    <a href="https://github.com/Nour-yahyaoui/WinterCave/blob/main/docs/actix-server.md">Server notes</a>
+  </nav>
+  <p class="colophon">
+    Rust and actix-web. No bundler, no npm, no analytics — this page is one HTML
+    file and one stylesheet, served as files.
+  </p>
+</footer>
+
+<script>
+(() => {
+  'use strict';
+
+  const root = document.documentElement;
+  const toggle = document.getElementById('theme-toggle');
+  const label = document.getElementById('theme-label');
+  const KEY = 'wintercave.theme';
+
+  function sync() {
+    const light = root.dataset.theme === 'light';
+    if (toggle) {
+      toggle.setAttribute('aria-pressed', light ? 'true' : 'false');
+      toggle.title = 'Switch to the ' + (light ? 'dark' : 'light') + ' theme';
+    }
+    if (label) label.textContent = light ? 'Dark' : 'Light';
+  }
+
+  if (toggle) {
+    toggle.addEventListener('click', () => {
+      root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light';
+      try {
+        localStorage.setItem(KEY, root.dataset.theme);
+      } catch (error) {
+        /* Private mode: the choice does not persist. */
+      }
+      sync();
+    });
+  }
+
+  const media = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
+  if (media && media.addEventListener) {
+    media.addEventListener('change', (event) => {
+      let stored = '';
+      try {
+        stored = localStorage.getItem(KEY) || '';
+      } catch (error) {
+        stored = '';
+      }
+      if (stored !== 'light' && stored !== 'dark') {
+        root.dataset.theme = event.matches ? 'light' : 'dark';
+        sync();
+      }
+    });
+  }
+  sync();
+
+  // ---- "on screen" callouts -------------------------------------------
+  const mock = document.getElementById('mock');
+  const buttons = Array.from(document.querySelectorAll('[data-focus]'));
+
+  function setFocus(value) {
+    if (!mock) return;
+    const active = mock.dataset.focus === value ? '' : value;
+    mock.dataset.focus = active;
+    buttons.forEach((button) => {
+      button.setAttribute('aria-pressed', button.dataset.focus === active ? 'true' : 'false');
+    });
+  }
+
+  buttons.forEach((button) => {
+    button.addEventListener('click', () => setFocus(button.dataset.focus));
+  });
+
+  // ---- copy the run command -------------------------------------------
+  const copy = document.getElementById('copy-run');
+  if (copy) {
+    copy.addEventListener('click', async () => {
+      const text = copy.dataset.copy || '';
+      try {
+        await navigator.clipboard.writeText(text);
+        copy.textContent = 'Copied';
+      } catch (error) {
+        copy.textContent = 'Select it yourself';
+      }
+      setTimeout(() => {
+        copy.textContent = 'Copy';
+      }, 1800);
+    });
+  }
+})();
+</script>
+</body>
+</html>

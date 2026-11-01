@@ -44,10 +44,52 @@ target, `sync_all`, rename over it. Every path is confined to `--root`; `..`,
 absolute paths and NUL bytes are rejected before the filesystem is touched, and
 symlinked parents are resolved and checked.
 
+**Folders and quick open** — the sidebar is a browser, not a fixed list:
+`/?dir=sub` shows a folder, folders are links, and a breadcrumb walks back to the
+workspace root. `Mod+P` opens a quick-open palette over the whole workspace
+(`POST /api/find`, ranked by the engine's subsequence matcher); `Mod+Shift+O`
+walks folders (`GET /api/tree`) and opens the one you choose. Both are server
+rendered as links first: with JavaScript off you still navigate, just without the
+palette.
+
+**Light and dark** — one token set, two palettes. The choice is saved in
+`localStorage['wintercave.theme']`; with nothing saved the page follows
+`prefers-color-scheme`. An inline script in `<head>` applies the answer before
+the stylesheet paints, so the wrong theme never flashes on load. The toggle is a
+button in the header (`aria-pressed` tracks it), and the fallback is CSS-only.
+
+**Completion** — `POST /api/complete` returns keyword, constant and
+buffer-identifier suggestions for the caret, ranked prefix-first then by
+subsequence (`wintercave_core::complete`). The popup is a listbox anchored on a
+hidden mirror of the textarea, because a textarea reports no caret geometry;
+`Up`/`Down`/`Enter`/`Tab`/`Esc` drive it and `Mod+Space` asks explicitly.
+Nothing leaves the machine: the candidates come from the file and the language
+table, not from a model.
+
 **No-JavaScript fallback** — `<noscript>` users get a normal form: `POST /save`
 writes the file and redirects back to it. The editor page is rendered by the
 server (`src/ui.rs`), so it is usable in any browser, including one with scripts
 off.
+
+## Landing page
+
+`site/` is the static page for **wintercave.vercel.app**: one `index.html` and one
+`styles.css`, no build step, no framework, no analytics. It documents what the
+project is, what the five editor surfaces do, how to run it and where the edges
+are. It deliberately does not host the editor — the editor is a localhost
+program.
+
+```bash
+python3 -m http.server 3000 --directory site   # look at it
+```
+
+Vercel project: `wintercave` (`prj_r5p8QHpFxixqYJz2dLTfrFZHFezZ`), output
+directory `site`, build and install commands set to no-ops. The framework is
+recorded as `svelte` only because the Vercel API rejects `other` through the
+connector and refuses the first deployment of a project without framework
+settings; nothing is built, the two files are served as they are. Git pushes do
+not deploy on their own (the integration has `createDeployments: disabled`), so
+deploy from the commit you want with the Vercel tool.
 
 ## Architecture
 
@@ -58,13 +100,13 @@ crates/wintercave-wasm/     wasm-bindgen bindings for the engine — kept compil
                             for a future in-browser engine; nothing loads it today
 crates/wintercave-server/   the editor: actix-web, HTML rendering, file API
   src/main.rs               binary: flags, bind, print the port
-  src/ui.rs                 the page, the highlight endpoint, the no-JS form
-  src/api.rs                /api/health, /api/files, /api/tree, CORS, errors
+  src/ui.rs                 the page, /api/highlight, /api/complete, the no-JS form
+  src/api.rs                /api/health, /api/files, /api/tree, /api/find, CORS
   src/files.rs              the only module that touches the disk; atomic writes
   src/paths.rs              "inside the root or rejected"
   src/codec.rs              percent and form encoding
   src/assets.rs             editor.js and editor.css, embedded with include_str!
-  assets/editor.js          the thin client: text in, text out, nothing else
+  assets/editor.js          the thin client: text, theme, dialogs, completion
   assets/editor.css         the whole stylesheet
   tests/api.rs              the actix application against a real temp workspace
   tests/live.rs             the compiled binary over a real socket, no HTTP crate
@@ -81,9 +123,12 @@ later; today the server is the shell.
 | --- | --- |
 | `GET /` | the editor page, rendered by the server |
 | `GET /?path=` | the editor page with that file open |
+| `GET /?dir=` | the editor page showing that folder |
 | `GET /assets/editor.js`, `/assets/editor.css` | the embedded client, with ETags |
 | `POST /save?path=` | the no-JavaScript save (form body), answers `303` |
 | `POST /api/highlight` | `{text, language\|path}` → `{html, language}` |
+| `POST /api/complete` | `{text, offset, language\|path}` → `{from, to, items}` |
+| `POST /api/find` | `{query, dir}` → `{items}` for quick open |
 | `GET /api/health` | name, version, workspace root, limits |
 | `GET /api/files?path=` | read a UTF-8 text file |
 | `PUT /api/files?path=` | replace an existing file (`{"text": "..."}`) |
@@ -112,13 +157,14 @@ Errors are `{"error": {"code": "...", "message": "..."}}` with stable codes:
 
 - **No auth, no TLS.** It binds `0.0.0.0` by default, like most local dev
   servers. On a shared machine pass `--host 127.0.0.1`.
-- **One file at a time, top-level listing.** The sidebar is not recursive and
-  there is no tab strip; navigation is a page load.
+- **One file at a time.** No tab strip; opening a file is a page load, and the
+  folder browser walks one level at a time (quick open does search recursively,
+  bounded to six levels and 4 000 entries).
 - **Highlighting is a round trip.** Typing is instant (the `textarea` is local),
   colours arrive ~120 ms later. A 20k-line file means a 20k-line POST per pause;
   the 400 KB ceiling exists for that reason.
-- **Multi-cursor, find/replace, the command palette and the file tree are not
-  wired to the page yet.** The engine implements them and its tests cover them
+- **Multi-cursor and find/replace are not wired to the page yet.** The folder
+  tree and the command palette are, in the reduced form described above. The engine implements them and its tests cover them
   (`crates/wintercave-core`), but this shell does not surface them — the previous
   TypeScript shell did, and it is preserved at tag `v0.2.0`.
 - **Blocking disk I/O on the async runtime.** Fine for one local user, wrong for

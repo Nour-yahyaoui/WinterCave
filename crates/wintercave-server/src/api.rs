@@ -11,8 +11,9 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::error::ServerError;
-use crate::files::FileService;
+use crate::files::{FileService, TreeEntry};
 use crate::{BODY_LIMIT, SERVER_NAME};
+use wintercave_core::fuzzy::fuzzy_filter;
 
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -160,6 +161,45 @@ pub async fn tree(
     let relative = if requested.is_empty() { "." } else { requested };
     let result = state.files.tree(relative)?;
     Ok(json(StatusCode::OK, &to_value(&result)?))
+}
+
+/// `POST /api/find` — quick open. Ranks the files below `dir` against `query`
+/// with the same subsequence matcher the command palette uses.
+pub async fn find_files(
+    state: web::Data<AppState>,
+    body: web::Bytes,
+) -> Result<HttpResponse, ServerError> {
+    let value = parse_body(&body)?;
+    let query = value.get("query").and_then(Value::as_str).unwrap_or("");
+    let dir = value.get("dir").and_then(Value::as_str).unwrap_or("");
+    let limit = value
+        .get("limit")
+        .and_then(Value::as_u64)
+        .unwrap_or(40)
+        .clamp(1, 200) as usize;
+
+    let walked = state.files.walk(dir)?;
+    let files: Vec<TreeEntry> = walked
+        .into_iter()
+        .filter(|entry| entry.kind == "file")
+        .collect();
+    let ranked = fuzzy_filter(&files, query, |entry| entry.path.clone(), limit);
+    let items: Vec<Value> = ranked
+        .iter()
+        .map(|found| {
+            let entry = &files[found.index];
+            serde_json::json!({
+                "path": entry.path.clone(),
+                "name": entry.name.clone(),
+                "score": found.score,
+            })
+        })
+        .collect();
+
+    Ok(json(
+        StatusCode::OK,
+        &serde_json::json!({ "items": items, "query": query, "dir": dir }),
+    ))
 }
 
 pub async fn method_not_allowed(request: HttpRequest) -> HttpResponse {
