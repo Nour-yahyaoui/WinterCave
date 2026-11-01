@@ -194,7 +194,9 @@ pub fn resolve_command<'a>(bindings: &'a Keymap, combo: &str) -> Option<&'a str>
     if let Some(command) = bindings.get(combo) {
         return Some(command.as_str());
     }
-    bindings.get(&normalize_combo(combo)).map(|value| value.as_str())
+    bindings
+        .get(&normalize_combo(combo))
+        .map(|value| value.as_str())
 }
 
 /// Combos that map to more than one command.
@@ -314,8 +316,14 @@ mod tests {
     fn resolves_default_bindings() {
         let bindings = default_bindings();
         assert_eq!(resolve_command(&bindings, "Mod+s"), Some("file.save"));
-        assert_eq!(resolve_command(&bindings, "Mod+ALT+UP"), Some("edit.moveLineUp"));
-        assert_eq!(resolve_command(&bindings, "Mod+/"), Some("edit.toggleComment"));
+        assert_eq!(
+            resolve_command(&bindings, "Mod+ALT+UP"),
+            Some("edit.moveLineUp")
+        );
+        assert_eq!(
+            resolve_command(&bindings, "Mod+/"),
+            Some("edit.toggleComment")
+        );
         assert_eq!(resolve_command(&bindings, ""), None);
         assert_eq!(resolve_command(&bindings, "Mod+q"), None);
     }
@@ -343,7 +351,9 @@ mod tests {
 
     #[test]
     fn detects_mac_user_agents() {
-        assert!(is_mac_platform("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15)"));
+        assert!(is_mac_platform(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15)"
+        ));
         assert!(is_mac_platform("Mozilla/5.0 (iPad; CPU OS 17_0)"));
         assert!(!is_mac_platform("Mozilla/5.0 (X11; Linux x86_64)"));
     }

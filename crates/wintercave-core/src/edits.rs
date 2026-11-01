@@ -226,7 +226,10 @@ mod tests {
     #[test]
     fn keeps_disjoint_edits_separate_and_sorted() {
         let merged = normalize_edits(&[TextEdit::insert(9, "z"), TextEdit::insert(1, "y")]);
-        assert_eq!(merged, vec![TextEdit::insert(1, "y"), TextEdit::insert(9, "z")]);
+        assert_eq!(
+            merged,
+            vec![TextEdit::insert(1, "y"), TextEdit::insert(9, "z")]
+        );
     }
 
     #[test]
@@ -236,26 +239,38 @@ mod tests {
 
     #[test]
     fn applies_disjoint_edits_right_to_left() {
-        let result = apply_concurrent(&doc("abcdef"), &[TextEdit::replace(1, 2, "B"), TextEdit::replace(4, 5, "E")]);
+        let result = apply_concurrent(
+            &doc("abcdef"),
+            &[TextEdit::replace(1, 2, "B"), TextEdit::replace(4, 5, "E")],
+        );
         assert_eq!(result.text(), "aBcdEf");
     }
 
     #[test]
     fn applies_an_overlapping_delete_once() {
-        let result = apply_concurrent(&doc("abcdefghij"), &[TextEdit::delete(2, 5), TextEdit::delete(4, 7)]);
+        let result = apply_concurrent(
+            &doc("abcdefghij"),
+            &[TextEdit::delete(2, 5), TextEdit::delete(4, 7)],
+        );
         assert_eq!(result.text(), "abhij");
     }
 
     #[test]
     fn lands_each_caret_after_its_own_insertion() {
-        let (next, carets) = apply_concurrent_with_carets(&doc("abc"), &[TextEdit::insert(0, "x"), TextEdit::insert(2, "x")]);
+        let (next, carets) = apply_concurrent_with_carets(
+            &doc("abc"),
+            &[TextEdit::insert(0, "x"), TextEdit::insert(2, "x")],
+        );
         assert_eq!(next.text(), "xabxc");
         assert_eq!(carets, vec![1, 4]);
     }
 
     #[test]
     fn reports_one_caret_per_edit_when_edits_merge() {
-        let (next, carets) = apply_concurrent_with_carets(&doc("abcdef"), &[TextEdit::delete(2, 4), TextEdit::delete(3, 5)]);
+        let (next, carets) = apply_concurrent_with_carets(
+            &doc("abcdef"),
+            &[TextEdit::delete(2, 4), TextEdit::delete(3, 5)],
+        );
         assert_eq!(next.text(), "abf");
         assert_eq!(carets, vec![2, 2]);
     }
@@ -264,7 +279,10 @@ mod tests {
     fn handles_a_multi_cursor_wrap() {
         let (next, carets) = apply_concurrent_with_carets(
             &doc("one two one"),
-            &[TextEdit::replace(0, 3, "ONE"), TextEdit::replace(8, 11, "ONE")],
+            &[
+                TextEdit::replace(0, 3, "ONE"),
+                TextEdit::replace(8, 11, "ONE"),
+            ],
         );
         assert_eq!(next.text(), "ONE two ONE");
         assert_eq!(carets, vec![3, 11]);
@@ -291,10 +309,22 @@ mod tests {
     #[test]
     fn inverts_a_sequence_of_inserts_in_reverse_order() {
         let source = doc("abc");
-        let edits = create_edits(&source, &[TextEdit::insert(0, "x"), TextEdit::insert(2, "y")]);
-        let applied = apply_sequential(&source, &edits.iter().map(|e| TextEdit::replace(e.from, e.to, &e.text)).collect::<Vec<_>>());
+        let edits = create_edits(
+            &source,
+            &[TextEdit::insert(0, "x"), TextEdit::insert(2, "y")],
+        );
+        let applied = apply_sequential(
+            &source,
+            &edits
+                .iter()
+                .map(|e| TextEdit::replace(e.from, e.to, &e.text))
+                .collect::<Vec<_>>(),
+        );
         assert_eq!(applied.text(), "xaybc");
-        assert_eq!(apply_applied_sequential(&applied, &invert_edits(&edits)).text(), "abc");
+        assert_eq!(
+            apply_applied_sequential(&applied, &invert_edits(&edits)).text(),
+            "abc"
+        );
     }
 
     #[test]
@@ -302,6 +332,9 @@ mod tests {
         let source = doc("abc");
         let edits = create_edits(&source, &[TextEdit::delete(2, 99)]);
         assert_eq!(edits[0].to, 3);
-        assert_eq!(apply_concurrent(&source, &[TextEdit::delete(2, 99)]).text(), "ab");
+        assert_eq!(
+            apply_concurrent(&source, &[TextEdit::delete(2, 99)]).text(),
+            "ab"
+        );
     }
 }

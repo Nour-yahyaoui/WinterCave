@@ -183,7 +183,15 @@ mod tests {
         let mut clock = 0u64;
         for ch in "hello".chars() {
             clock += 100;
-            doc = typed(&mut history, &doc, caret, &ch.to_string(), caret, caret + 1, clock);
+            doc = typed(
+                &mut history,
+                &doc,
+                caret,
+                &ch.to_string(),
+                caret,
+                caret + 1,
+                clock,
+            );
             caret += 1;
         }
         assert_eq!(doc.text(), "hello");
@@ -197,7 +205,15 @@ mod tests {
         let mut doc = TextDocument::empty();
         let mut caret = 0usize;
         for ch in "ab".chars() {
-            doc = typed(&mut history, &doc, caret, &ch.to_string(), caret, caret + 1, 0);
+            doc = typed(
+                &mut history,
+                &doc,
+                caret,
+                &ch.to_string(),
+                caret,
+                caret + 1,
+                0,
+            );
             caret += 1;
         }
         doc = typed(&mut history, &doc, caret, "c", caret, caret + 1, 2000);
@@ -233,7 +249,15 @@ mod tests {
         let mut doc = TextDocument::empty();
         for index in 0..5u64 {
             let caret = doc.len();
-            doc = typed(&mut history, &doc, caret, &index.to_string(), caret, caret + 1, index * 1000);
+            doc = typed(
+                &mut history,
+                &doc,
+                caret,
+                &index.to_string(),
+                caret,
+                caret + 1,
+                index * 1000,
+            );
         }
         assert_eq!(history.undo_depth(), 3);
         let mut current = doc;

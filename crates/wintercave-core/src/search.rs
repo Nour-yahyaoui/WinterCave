@@ -124,9 +124,7 @@ impl Search {
                 let mut expanded = String::new();
                 match regex.captures_at(text, found.start()) {
                     Some(captures)
-                        if captures
-                            .get(0)
-                            .map(|whole| (whole.start(), whole.end()))
+                        if captures.get(0).map(|whole| (whole.start(), whole.end()))
                             == Some((found.start(), found.end())) =>
                     {
                         captures.expand(replacement, &mut expanded);
@@ -209,7 +207,10 @@ mod tests {
             regex: true,
             ..SearchOptions::default()
         });
-        assert_eq!(search.matches("a1 bb22 c333"), vec![(1, 2), (5, 7), (9, 12)]);
+        assert_eq!(
+            search.matches("a1 bb22 c333"),
+            vec![(1, 2), (5, 7), (9, 12)]
+        );
     }
 
     #[test]
@@ -231,7 +232,10 @@ mod tests {
             whole_word: true,
             ..SearchOptions::default()
         });
-        assert_eq!(search.matches("concatenate cat cats _cat cat_"), vec![(12, 15)]);
+        assert_eq!(
+            search.matches("concatenate cat cats _cat cat_"),
+            vec![(12, 15)]
+        );
     }
 
     #[test]

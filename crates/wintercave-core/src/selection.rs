@@ -110,7 +110,13 @@ mod tests {
             anchor: 99,
             head: 4,
         };
-        assert_eq!(selection.clamped(10), Selection { anchor: 10, head: 4 });
+        assert_eq!(
+            selection.clamped(10),
+            Selection {
+                anchor: 10,
+                head: 4
+            }
+        );
     }
 
     #[test]

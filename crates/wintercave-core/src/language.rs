@@ -87,42 +87,175 @@ pub struct LanguageDef {
 }
 
 const JS_KEYWORDS: &[&str] = &[
-    "async", "await", "break", "case", "catch", "class", "const", "continue", "debugger",
-    "default", "delete", "do", "else", "enum", "export", "extends", "finally", "for", "from",
-    "function", "get", "if", "implements", "import", "in", "instanceof", "interface", "let",
-    "new", "of", "return", "set", "static", "super", "switch", "this", "throw", "try", "type",
-    "typeof", "var", "void", "while", "with", "yield",
+    "async",
+    "await",
+    "break",
+    "case",
+    "catch",
+    "class",
+    "const",
+    "continue",
+    "debugger",
+    "default",
+    "delete",
+    "do",
+    "else",
+    "enum",
+    "export",
+    "extends",
+    "finally",
+    "for",
+    "from",
+    "function",
+    "get",
+    "if",
+    "implements",
+    "import",
+    "in",
+    "instanceof",
+    "interface",
+    "let",
+    "new",
+    "of",
+    "return",
+    "set",
+    "static",
+    "super",
+    "switch",
+    "this",
+    "throw",
+    "try",
+    "type",
+    "typeof",
+    "var",
+    "void",
+    "while",
+    "with",
+    "yield",
 ];
 
 const TS_KEYWORDS: &[&str] = &[
-    "abstract", "and", "as", "asserts", "async", "await", "break", "case", "catch", "class",
-    "const", "continue", "debugger", "declare", "default", "delete", "do", "else", "enum",
-    "export", "extends", "finally", "for", "from", "function", "get", "if", "implements",
-    "import", "in", "infer", "instanceof", "interface", "is", "keyof", "let", "module",
-    "namespace", "never", "new", "of", "override", "readonly", "return", "satisfies", "set",
-    "static", "super", "switch", "this", "throw", "try", "type", "typeof", "unknown", "var",
-    "void", "while", "with", "yield",
+    "abstract",
+    "and",
+    "as",
+    "asserts",
+    "async",
+    "await",
+    "break",
+    "case",
+    "catch",
+    "class",
+    "const",
+    "continue",
+    "debugger",
+    "declare",
+    "default",
+    "delete",
+    "do",
+    "else",
+    "enum",
+    "export",
+    "extends",
+    "finally",
+    "for",
+    "from",
+    "function",
+    "get",
+    "if",
+    "implements",
+    "import",
+    "in",
+    "infer",
+    "instanceof",
+    "interface",
+    "is",
+    "keyof",
+    "let",
+    "module",
+    "namespace",
+    "never",
+    "new",
+    "of",
+    "override",
+    "readonly",
+    "return",
+    "satisfies",
+    "set",
+    "static",
+    "super",
+    "switch",
+    "this",
+    "throw",
+    "try",
+    "type",
+    "typeof",
+    "unknown",
+    "var",
+    "void",
+    "while",
+    "with",
+    "yield",
 ];
 
 const PYTHON_KEYWORDS: &[&str] = &[
     "and", "as", "assert", "async", "await", "break", "case", "class", "continue", "def", "del",
     "elif", "else", "except", "finally", "for", "from", "global", "if", "import", "in", "is",
-    "lambda", "match", "nonlocal", "not", "or", "pass", "raise", "return", "try", "while",
-    "with", "yield",
+    "lambda", "match", "nonlocal", "not", "or", "pass", "raise", "return", "try", "while", "with",
+    "yield",
 ];
 
 const SHELL_KEYWORDS: &[&str] = &[
     "if", "then", "else", "elif", "fi", "for", "while", "until", "do", "done", "case", "esac",
-    "function", "return", "in", "select", "time", "export", "local", "readonly", "source",
-    "alias", "unset", "set", "shift", "trap", "eval", "exec", "exit",
+    "function", "return", "in", "select", "time", "export", "local", "readonly", "source", "alias",
+    "unset", "set", "shift", "trap", "eval", "exec", "exit",
 ];
 
 const SQL_KEYWORDS: &[&str] = &[
-    "select", "from", "where", "insert", "into", "values", "update", "set", "delete", "create",
-    "table", "alter", "drop", "index", "view", "join", "left", "right", "inner", "outer",
-    "full", "on", "group", "by", "order", "having", "limit", "offset", "union", "all",
-    "distinct", "as", "and", "or", "not", "null", "case", "when", "then", "else", "end",
-    "primary", "foreign", "key", "references",
+    "select",
+    "from",
+    "where",
+    "insert",
+    "into",
+    "values",
+    "update",
+    "set",
+    "delete",
+    "create",
+    "table",
+    "alter",
+    "drop",
+    "index",
+    "view",
+    "join",
+    "left",
+    "right",
+    "inner",
+    "outer",
+    "full",
+    "on",
+    "group",
+    "by",
+    "order",
+    "having",
+    "limit",
+    "offset",
+    "union",
+    "all",
+    "distinct",
+    "as",
+    "and",
+    "or",
+    "not",
+    "null",
+    "case",
+    "when",
+    "then",
+    "else",
+    "end",
+    "primary",
+    "foreign",
+    "key",
+    "references",
 ];
 
 const JS_CONSTANTS: &[&str] = &["true", "false", "null", "undefined", "NaN", "Infinity"];
@@ -225,7 +358,14 @@ pub const LANGUAGES: &[LanguageDef] = &[
         name: "CSS",
         extensions: &["css", "scss", "less"],
         family: LanguageFamily::Style,
-        keywords: &["@media", "@import", "@font-face", "@keyframes", "@supports", "@layer"],
+        keywords: &[
+            "@media",
+            "@import",
+            "@font-face",
+            "@keyframes",
+            "@supports",
+            "@layer",
+        ],
         constants: NO_CONSTANTS,
         line_comment: None,
         block_comment: Some(("/*", "*/")),
@@ -368,7 +508,9 @@ fn scan_number(line: &str, start: usize) -> usize {
         match bytes.get(index + 1) {
             Some(b'x') | Some(b'X') => {
                 index += 2;
-                while index < line.len() && (bytes[index].is_ascii_hexdigit() || bytes[index] == b'_') {
+                while index < line.len()
+                    && (bytes[index].is_ascii_hexdigit() || bytes[index] == b'_')
+                {
                     index += 1;
                 }
                 return index;
@@ -513,12 +655,18 @@ fn tokenize_code_line(
             let word = &line[index..end];
             let lowered = word.to_ascii_lowercase();
             let keyword = if language.case_insensitive_keywords {
-                language.keywords.iter().any(|candidate| *candidate == lowered)
+                language
+                    .keywords
+                    .iter()
+                    .any(|candidate| *candidate == lowered)
             } else {
                 language.keywords.contains(&word)
             };
             let constant = if language.case_insensitive_keywords {
-                language.constants.iter().any(|candidate| *candidate == lowered)
+                language
+                    .constants
+                    .iter()
+                    .any(|candidate| *candidate == lowered)
             } else {
                 language.constants.contains(&word)
             };
@@ -529,7 +677,12 @@ fn tokenize_code_line(
                 Some(TokenType::Constant)
             } else if line[end..].starts_with('(') {
                 Some(TokenType::Function)
-            } else if word.chars().next().map(|first| first.is_ascii_uppercase()).unwrap_or(false) {
+            } else if word
+                .chars()
+                .next()
+                .map(|first| first.is_ascii_uppercase())
+                .unwrap_or(false)
+            {
                 Some(TokenType::Type)
             } else {
                 None
@@ -545,7 +698,9 @@ fn tokenize_code_line(
             let mut end = index + size;
             while end < line.len() {
                 match next_char(line, end) {
-                    Some((operator, operator_size)) if is_operator(operator) => end += operator_size,
+                    Some((operator, operator_size)) if is_operator(operator) => {
+                        end += operator_size
+                    }
                     _ => break,
                 }
             }
@@ -577,7 +732,9 @@ fn tokenize_style_line(
             let mut end = index + size;
             while end < line.len() {
                 match next_char(line, end) {
-                    Some((part, part_size)) if part.is_ascii_alphanumeric() || part == '-' || part == '_' => {
+                    Some((part, part_size))
+                        if part.is_ascii_alphanumeric() || part == '-' || part == '_' =>
+                    {
                         end += part_size
                     }
                     _ => break,
@@ -605,13 +762,17 @@ fn tokenize_style_line(
             let mut end = index;
             while end < line.len() {
                 match next_char(line, end) {
-                    Some((part, part_size)) if part.is_ascii_alphanumeric() || part == '-' => end += part_size,
+                    Some((part, part_size)) if part.is_ascii_alphanumeric() || part == '-' => {
+                        end += part_size
+                    }
                     _ => break,
                 }
             }
             if end > index {
                 let mut probe = end;
-                while probe < line.len() && (line.as_bytes()[probe] == b' ' || line.as_bytes()[probe] == b'\t') {
+                while probe < line.len()
+                    && (line.as_bytes()[probe] == b' ' || line.as_bytes()[probe] == b'\t')
+                {
                     probe += 1;
                 }
                 if probe < line.len() && line.as_bytes()[probe] == b':' {
@@ -669,7 +830,11 @@ fn tokenize_markup_line(
             push_token(&mut tokens, index, end, TokenType::Tag);
 
             let inner_start = index + 1;
-            let inner_end = if end > inner_start { end - 1 } else { inner_start };
+            let inner_end = if end > inner_start {
+                end - 1
+            } else {
+                inner_start
+            };
             let inner = &line[inner_start.min(inner_end)..inner_end.max(inner_start)];
             let mut cursor = 0usize;
             while cursor < inner.len() {
@@ -681,7 +846,10 @@ fn tokenize_markup_line(
                     while word_end < inner.len() {
                         match next_char(inner, word_end) {
                             Some((part, part_size))
-                                if part.is_ascii_alphanumeric() || part == '-' || part == '_' || part == ':' =>
+                                if part.is_ascii_alphanumeric()
+                                    || part == '-'
+                                    || part == '_'
+                                    || part == ':' =>
                             {
                                 word_end += part_size
                             }
@@ -693,7 +861,12 @@ fn tokenize_markup_line(
                         probe += 1;
                     }
                     if probe < inner.len() && inner.as_bytes()[probe] == b'=' {
-                        push_token(&mut tokens, inner_start + cursor, inner_start + word_end, TokenType::Attribute);
+                        push_token(
+                            &mut tokens,
+                            inner_start + cursor,
+                            inner_start + word_end,
+                            TokenType::Attribute,
+                        );
                         let mut value_start = probe + 1;
                         while value_start < inner.len() && inner.as_bytes()[value_start] == b' ' {
                             value_start += 1;
@@ -1063,7 +1236,10 @@ mod tests {
 
     #[test]
     fn does_not_treat_a_keyword_prefix_as_a_keyword() {
-        assert_eq!(render("constant = 1", "javascript"), vec!["operator:=", "number:1"]);
+        assert_eq!(
+            render("constant = 1", "javascript"),
+            vec!["operator:=", "number:1"]
+        );
     }
 
     #[test]
@@ -1081,7 +1257,14 @@ mod tests {
         assert_eq!(state.block_comment, Some("*/"));
         let (tokens, next) = tokenize_line("still comment */ code()", language, state);
         assert_eq!(next.block_comment, None);
-        assert_eq!(tokens[0], Token { start: 0, end: 16, kind: TokenType::Comment });
+        assert_eq!(
+            tokens[0],
+            Token {
+                start: 0,
+                end: 16,
+                kind: TokenType::Comment
+            }
+        );
     }
 
     #[test]
@@ -1151,7 +1334,14 @@ mod tests {
         let (_, open) = tokenize_line("```js", language, HighlightState::default());
         assert!(open.fence);
         let (inside, _) = tokenize_line("const x = 1;", language, open);
-        assert_eq!(inside[0], Token { start: 0, end: 12, kind: TokenType::Code });
+        assert_eq!(
+            inside[0],
+            Token {
+                start: 0,
+                end: 12,
+                kind: TokenType::Code
+            }
+        );
         let (_, close) = tokenize_line("```", language, open);
         assert!(!close.fence);
     }
@@ -1182,23 +1372,51 @@ mod tests {
         let flat = flatten_tokens(
             line,
             &[
-                Token { start: 0, end: 4, kind: TokenType::Tag },
-                Token { start: 2, end: 3, kind: TokenType::Attribute },
+                Token {
+                    start: 0,
+                    end: 4,
+                    kind: TokenType::Tag,
+                },
+                Token {
+                    start: 2,
+                    end: 3,
+                    kind: TokenType::Attribute,
+                },
             ],
         );
         assert_eq!(
             flat,
             vec![
-                Token { start: 0, end: 2, kind: TokenType::Tag },
-                Token { start: 2, end: 3, kind: TokenType::Attribute },
-                Token { start: 3, end: 4, kind: TokenType::Tag },
+                Token {
+                    start: 0,
+                    end: 2,
+                    kind: TokenType::Tag
+                },
+                Token {
+                    start: 2,
+                    end: 3,
+                    kind: TokenType::Attribute
+                },
+                Token {
+                    start: 3,
+                    end: 4,
+                    kind: TokenType::Tag
+                },
             ]
         );
     }
 
     #[test]
     fn flatten_ignores_out_of_range_tokens() {
-        assert!(flatten_tokens("ab", &[Token { start: 5, end: 9, kind: TokenType::Str }]).is_empty());
+        assert!(flatten_tokens(
+            "ab",
+            &[Token {
+                start: 5,
+                end: 9,
+                kind: TokenType::Str
+            }]
+        )
+        .is_empty());
     }
 
     #[test]

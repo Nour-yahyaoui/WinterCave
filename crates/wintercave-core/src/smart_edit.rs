@@ -276,7 +276,10 @@ pub fn toggle_comment_block(lines: &[&str], prefix: Option<&str>) -> Vec<String>
     let Some(prefix) = prefix else {
         return lines.iter().map(|line| line.to_string()).collect();
     };
-    let meaningful: Vec<&&str> = lines.iter().filter(|line| !line.trim().is_empty()).collect();
+    let meaningful: Vec<&&str> = lines
+        .iter()
+        .filter(|line| !line.trim().is_empty())
+        .collect();
     if meaningful.is_empty() {
         return lines.iter().map(|line| line.to_string()).collect();
     }
@@ -311,7 +314,10 @@ mod tests {
     fn wraps_a_selection_in_the_matching_pair() {
         assert_eq!(
             decide_auto_close('(', None, None, true),
-            Some(AutoCloseAction::Wrap { open: '(', close: ')' })
+            Some(AutoCloseAction::Wrap {
+                open: '(',
+                close: ')'
+            })
         );
         assert_eq!(decide_auto_close('x', None, None, true), None);
     }
@@ -441,7 +447,10 @@ mod tests {
         let commented = toggle_comment_block(&lines, Some("//"));
         assert_eq!(commented, vec!["// a", "", "  // b"]);
         let back = toggle_comment_block(
-            &commented.iter().map(|line| line.as_str()).collect::<Vec<_>>(),
+            &commented
+                .iter()
+                .map(|line| line.as_str())
+                .collect::<Vec<_>>(),
             Some("//"),
         );
         assert_eq!(back, vec!["a", "", "  b"]);
@@ -451,6 +460,9 @@ mod tests {
     fn leaving_a_block_untouched_without_a_comment_prefix() {
         let lines = ["a", "b"];
         assert_eq!(toggle_comment_block(&lines, None), vec!["a", "b"]);
-        assert_eq!(toggle_comment_block(&["", "  "], Some("//")), vec!["", "  "]);
+        assert_eq!(
+            toggle_comment_block(&["", "  "], Some("//")),
+            vec!["", "  "]
+        );
     }
 }

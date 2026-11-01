@@ -157,7 +157,9 @@ impl TextDocument {
     }
 
     pub fn lines(&self) -> Vec<&str> {
-        (0..self.starts.len()).map(|line| self.line_text(line)).collect()
+        (0..self.starts.len())
+            .map(|line| self.line_text(line))
+            .collect()
     }
 }
 

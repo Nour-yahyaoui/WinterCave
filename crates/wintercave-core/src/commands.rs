@@ -73,14 +73,19 @@ pub fn search(commands: &[CommandMeta], query: &str, limit: usize) -> Vec<Ranked
             .collect();
     }
     let candidates: Vec<usize> = entries;
-    fuzzy_filter(&candidates, trimmed, |index| commands[*index].label(), limit)
-        .into_iter()
-        .map(|ranked| RankedMatch {
-            index: candidates[ranked.index],
-            score: ranked.score,
-            positions: ranked.positions,
-        })
-        .collect()
+    fuzzy_filter(
+        &candidates,
+        trimmed,
+        |index| commands[*index].label(),
+        limit,
+    )
+    .into_iter()
+    .map(|ranked| RankedMatch {
+        index: candidates[ranked.index],
+        score: ranked.score,
+        positions: ranked.positions,
+    })
+    .collect()
 }
 
 #[cfg(test)]
@@ -137,9 +142,6 @@ mod tests {
 
     #[test]
     fn labels_read_category_colon_title() {
-        assert_eq!(
-            CommandMeta::new("a", "Save", "File").label(),
-            "File: Save"
-        );
+        assert_eq!(CommandMeta::new("a", "Save", "File").label(), "File: Save");
     }
 }

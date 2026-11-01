@@ -168,7 +168,9 @@ mod tests {
     #[test]
     fn prefers_exact_matches() {
         let exact = fuzzy_match("file.save", "file.save").expect("match").score;
-        let partial = fuzzy_match("file.save", "file.saveAs").expect("match").score;
+        let partial = fuzzy_match("file.save", "file.saveAs")
+            .expect("match")
+            .score;
         assert!(exact > partial);
     }
 
@@ -198,6 +200,9 @@ mod tests {
     #[test]
     fn respects_the_limit() {
         let items = ["a", "ab", "abc", "abcd"];
-        assert_eq!(fuzzy_filter(&items, "a", |item| item.to_string(), 2).len(), 2);
+        assert_eq!(
+            fuzzy_filter(&items, "a", |item| item.to_string(), 2).len(),
+            2
+        );
     }
 }
