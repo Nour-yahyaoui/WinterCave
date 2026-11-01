@@ -33,12 +33,9 @@ fn query_path(query: &PathQuery) -> &str {
     query.path.as_deref().unwrap_or("")
 }
 
-fn cors_headers(builder: actix_web::HttpResponseBuilder) -> actix_web::HttpResponseBuilder {
-    builder.insert_header((header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"))
-}
-
 fn json(status: StatusCode, body: &Value) -> HttpResponse {
-    cors_headers(HttpResponse::build(status))
+    HttpResponse::build(status)
+        .insert_header((header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"))
         .insert_header((header::CONTENT_TYPE, "application/json; charset=utf-8"))
         .insert_header((header::CACHE_CONTROL, "no-store"))
         .insert_header(("X-Content-Type-Options", "nosniff"))

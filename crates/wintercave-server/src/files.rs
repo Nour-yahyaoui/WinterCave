@@ -188,13 +188,14 @@ impl FileService {
             )
         })?;
 
+        let line_ending = detect_line_ending(&text);
         Ok(FileRecord {
             path: normalized.clone(),
             name: paths::base_name(&normalized),
             text,
             size,
             mtime: mtime_ms(&meta),
-            line_ending: detect_line_ending(&text),
+            line_ending,
             read_only: self.read_only,
         })
     }
