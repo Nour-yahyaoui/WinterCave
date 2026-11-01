@@ -123,7 +123,6 @@ export const DEFAULT_BINDINGS: Keymap = {
   'Mod+=': 'view.zoomIn',
   'Mod+-': 'view.zoomOut',
   'Mod+0': 'view.zoomReset',
-  'Mod+\\': 'view.splitEditor',
 };
 
 export function normalizeKeymap(bindings: Keymap): Keymap {
