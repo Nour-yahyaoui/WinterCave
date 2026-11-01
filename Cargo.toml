@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/wintercave-core"]
+members = ["crates/wintercave-core", "crates/wintercave-wasm"]
 resolver = "2"
 
 [workspace.package]

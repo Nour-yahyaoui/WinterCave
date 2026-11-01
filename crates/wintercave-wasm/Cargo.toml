@@ -1,0 +1,14 @@
+[package]
+name = "wintercave-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "WebAssembly bindings for the WinterCave editor engine"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wintercave-core = { path = "../wintercave-core" }
+wasm-bindgen = "=0.2.100"
+js-sys = "0.3"

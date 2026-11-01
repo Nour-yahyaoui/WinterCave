@@ -44,3 +44,24 @@ jobs:
           fi
       - name: Tests
         run: cargo test --workspace --all-targets
+
+  wasm:
+    name: WebAssembly engine (build, smoke test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Install wasm-bindgen-cli
+        run: command -v wasm-bindgen || cargo install wasm-bindgen-cli --version 0.2.100 --locked
+      - name: Build the engine
+        run: npm run wasm:build
+      - name: Smoke test the engine from JavaScript
+        run: npm run wasm:smoke
+      - name: Report bundle size
+        run: du -h public/wasm/* && gzip -c public/wasm/wintercave_core_bg.wasm | wc -c
