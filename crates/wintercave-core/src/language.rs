@@ -260,6 +260,17 @@ const SQL_KEYWORDS: &[&str] = &[
 
 const JS_CONSTANTS: &[&str] = &["true", "false", "null", "undefined", "NaN", "Infinity"];
 const NO_CONSTANTS: &[&str] = &[];
+
+const RUST_KEYWORDS: &[&str] = &[
+    "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum",
+    "extern", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut",
+    "pub", "ref", "return", "self", "Self", "static", "struct", "super", "trait", "type",
+    "unsafe", "use", "where", "while", "yield",
+];
+const RUST_CONSTANTS: &[&str] = &["true", "false", "None", "Some", "Ok", "Err"];
+/// Rust strings use `"` only: `'a` is a lifetime, not a char literal, and
+/// colouring it as a string would break every generic in the file.
+const RUST_QUOTES: &[char] = &['"'];
 const CODE_QUOTES: &[char] = &['"', '\'', '`'];
 
 pub const LANGUAGES: &[LanguageDef] = &[
@@ -319,6 +330,21 @@ pub const LANGUAGES: &[LanguageDef] = &[
         block_comment: Some(("/*", "*/")),
         quotes: CODE_QUOTES,
         multiline_quotes: &['`'],
+        case_insensitive_keywords: false,
+        word_wrap_default: false,
+        spellcheck_default: false,
+    },
+    LanguageDef {
+        id: "rust",
+        name: "Rust",
+        extensions: &["rs"],
+        family: LanguageFamily::Code,
+        keywords: RUST_KEYWORDS,
+        constants: RUST_CONSTANTS,
+        line_comment: Some("//"),
+        block_comment: Some(("/*", "*/")),
+        quotes: RUST_QUOTES,
+        multiline_quotes: &[],
         case_insensitive_keywords: false,
         word_wrap_default: false,
         spellcheck_default: false,
@@ -1224,6 +1250,21 @@ mod tests {
     #[test]
     fn falls_back_to_plain_text_for_unknown_ids() {
         assert_eq!(get_language("klingon").id, "plaintext");
+    }
+
+    #[test]
+    fn highlights_rust_source() {
+        assert_eq!(
+            render("let x = 1; // note", "rust"),
+            vec!["keyword:let", "operator:=", "number:1", "comment:// note"]
+        );
+        assert!(render("fn main() { /* hi */ }", "rust")
+            .contains(&"comment:/* hi */".to_string()));
+        assert_eq!(language_for_filename("src/main.rs").id, "rust");
+        // A lifetime is not a string.
+        assert!(render("fn f<'a>(x: &'a str)", "rust")
+            .iter()
+            .all(|token| !token.starts_with("string:")));
     }
 
     #[test]

@@ -32,9 +32,9 @@ reimplementation. `Mod+S` saves over `PUT /api/files`; the status bar shows
 **Highlighting** — every keystroke (debounced 120 ms) posts the buffer to
 `/api/highlight`, the server tokenizes it with `wintercave-core` and answers with
 HTML spans; a scroll-synced layer behind the textarea paints them. Tokenizing
-11 languages — Rust, TypeScript/JavaScript, Python, Go, C/C++, Java, JSON,
-HTML, CSS, Markdown, plain text — is the engine crate's job, and its 129 tests
-are the specification. Above 400 KB the page stops highlighting instead of
+12 languages — Rust, JavaScript/TypeScript, Python, shell, YAML, SQL, JSON,
+HTML, CSS, Markdown, plain text — is the engine crate's job, and its tests are
+the specification. Above 400 KB the page stops highlighting instead of
 sending megabytes per keystroke.
 
 **Files** — the sidebar lists the root directory (folders first, with `target`,
@@ -53,7 +53,7 @@ off.
 
 ```
 crates/wintercave-core/     the engine: document model, edits, undo, search,
-                            tokenizer, smart editing, keymap (129 tests)
+                            tokenizer, smart editing, keymap
 crates/wintercave-wasm/     wasm-bindgen bindings for the engine — kept compiling
                             for a future in-browser engine; nothing loads it today
 crates/wintercave-server/   the editor: actix-web, HTML rendering, file API
