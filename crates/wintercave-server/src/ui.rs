@@ -157,7 +157,7 @@ fn html_response(status: StatusCode, body: &str) -> HttpResponse {
 }
 
 fn push_crumbs(html: &mut String, data: &PageData) {
-    html.push_str("<nav class=\"crumbs\" aria-label=\"Folders\"><a href=\"/\">");
+    html.push_str("<nav class=\"crumbs\" id=\"workspace-crumbs\" aria-label=\"Folders\"><a href=\"/\">");
     html.push_str(&escape_html(&root_label(&data.root)));
     html.push_str("</a>");
     for (label, path) in &data.crumbs {
@@ -203,12 +203,15 @@ pub fn render(data: &PageData) -> String {
         "<button type=\"button\" class=\"action\" id=\"open-file\" title=\"Quick open (Ctrl or Cmd + P)\">Open file…<kbd>⌘P</kbd></button>\n",
     );
     html.push_str(
-        "<button type=\"button\" class=\"action\" id=\"open-folder\" title=\"Browse folders (Ctrl or Cmd + Shift + O)\">Open folder…</button>\n",
+        "<button type=\"button\" class=\"action\" id=\"open-folder\" title=\"Browse the workspace (Ctrl or Cmd + Shift + O)\">Browse workspace…</button>\n",
     );
+    html.push_str("<button type=\"button\" class=\"action\" id=\"open-local-folder\">Choose folder on this PC…</button>\n");
+    html.push_str("<button type=\"button\" class=\"action\" id=\"open-settings\">Settings</button>\n");
+    html.push_str("<button type=\"button\" class=\"action\" id=\"open-about\">About WinterCave</button>\n");
     html.push_str("</div>\n");
     push_crumbs(&mut html, data);
 
-    html.push_str("<ul class=\"files\">\n");
+    html.push_str("<ul class=\"files\" id=\"workspace-files\">\n");
     if !data.dir.is_empty() {
         let parent = parent_of(&data.dir);
         html.push_str("<li><a class=\"dir up\" href=\"/");
@@ -240,20 +243,21 @@ pub fn render(data: &PageData) -> String {
             html.push_str("</a></li>\n");
         }
     }
-    html.push_str("</ul>\n<p class=\"root\" title=\"");
+    html.push_str("</ul>\n<p class=\"root\" id=\"workspace-root\" title=\"");
     html.push_str(&escape_html(&data.root));
     html.push_str("\">");
     html.push_str(&escape_html(&data.root));
     html.push_str("</p>\n<p class=\"hint\">highlighting, completion and search run in Rust</p>\n</aside>\n");
+    html.push_str("<div class=\"sidebar-resize\" id=\"sidebar-resize\" role=\"separator\" tabindex=\"0\" aria-orientation=\"vertical\" aria-valuemin=\"200\" aria-valuemax=\"520\" aria-valuenow=\"262\" aria-label=\"Resize sidebar\"></div>\n");
 
     // ---- editor --------------------------------------------------------
-    html.push_str("<main class=\"pane\">\n<header class=\"bar\"><span class=\"name\">");
+    html.push_str("<main class=\"pane\">\n<header class=\"bar\"><span class=\"name\" id=\"current-name\">");
     if data.current_name.is_empty() {
         html.push_str("<em>no file open</em>");
     } else {
         html.push_str(&escape_html(&data.current_name));
     }
-    html.push_str("</span><span class=\"language\">");
+    html.push_str("</span><span class=\"language\" id=\"current-language\">");
     html.push_str(&escape_html(&data.language));
     html.push_str("</span><button type=\"button\" class=\"theme\" id=\"theme-toggle\" aria-pressed=\"false\" aria-label=\"Toggle the colour theme\" title=\"Switch between the dark and light theme\"><span id=\"theme-label\">Light</span></button></header>\n");
 
@@ -302,6 +306,21 @@ pub fn render(data: &PageData) -> String {
     html.push_str("<nav class=\"crumbs\" id=\"folder-crumbs\" aria-label=\"Folder path\"></nav>\n");
     html.push_str("<ul class=\"results\" id=\"folder-results\" role=\"listbox\" aria-label=\"Folders\"></ul>\n");
     html.push_str("<div class=\"sheet-foot\"><button type=\"button\" class=\"action primary\" id=\"folder-open\">Open this folder</button></div>\n</dialog>\n");
+
+    html.push_str("<dialog class=\"sheet\" id=\"settings\" aria-label=\"Settings\">\n");
+    html.push_str("<div class=\"sheet-head\"><span>Settings</span><button type=\"button\" class=\"close\" data-close aria-label=\"Close settings\">Close</button></div>\n");
+    html.push_str("<div class=\"settings-body\">\n");
+    html.push_str("<label class=\"setting-row\" for=\"setting-theme\"><span>Color theme</span><select id=\"setting-theme\"><option value=\"system\">System</option><option value=\"dark\">Dark</option><option value=\"light\">Light</option></select></label>\n");
+    html.push_str("<label class=\"setting-row\" for=\"setting-font-size\"><span>Editor text size</span><select id=\"setting-font-size\"><option value=\"12\">12 px</option><option value=\"13\">13 px</option><option value=\"14\">14 px</option><option value=\"15\">15 px</option><option value=\"16\">16 px</option><option value=\"18\">18 px</option></select></label>\n");
+    html.push_str("<label class=\"setting-row\" for=\"setting-tab-size\"><span>Tab width</span><select id=\"setting-tab-size\"><option value=\"2\">2 spaces</option><option value=\"4\">4 spaces</option><option value=\"8\">8 spaces</option></select></label>\n");
+    html.push_str("<label class=\"setting-row\" for=\"setting-wrap\"><span>Wrap long lines</span><input id=\"setting-wrap\" type=\"checkbox\"></label>\n");
+    html.push_str("<p class=\"settings-note\">Preferences are saved in this browser. The sidebar width is adjustable by dragging its divider.</p>\n</div>\n</dialog>\n");
+
+    html.push_str("<dialog class=\"sheet\" id=\"about\" aria-label=\"About WinterCave\">\n");
+    html.push_str("<div class=\"sheet-head\"><span>About</span><button type=\"button\" class=\"close\" data-close aria-label=\"Close about\">Close</button></div>\n");
+    html.push_str("<div class=\"about-body\"><h2>WinterCave</h2><p>A local text editor built with Rust. Your files stay on your computer.</p><p>Version ");
+    html.push_str(&escape_html(&data.version));
+    html.push_str(" · MIT License</p><p>Folder access uses the browser's explicit directory permission when supported. No icon font or remote icon service is used.</p><p><a href=\"https://github.com/Nour-yahyaoui/WinterCave\" target=\"_blank\" rel=\"noopener noreferrer\">Project source</a></p></div>\n</dialog>\n");
 
     html.push_str("<script src=\"/assets/editor.js\" defer></script>\n</body>\n</html>\n");
 
