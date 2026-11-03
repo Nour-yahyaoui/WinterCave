@@ -6,9 +6,9 @@ No Node, no npm, no bundler, no wasm shell, no `dist/`.
 
 ```bash
 cargo run -p wintercave-server -- --port 4173 --root .
-# → wintercave-server 0.3.0
+# → wintercave-server 0.3.1
 #   root: /home/you/project
-#   listening on http://0.0.0.0:4173
+#   listening on http://127.0.0.1:4173
 ```
 
 Open that address. The left column lists the workspace, the right one is the
@@ -101,7 +101,7 @@ crates/wintercave-wasm/     wasm-bindgen bindings for the engine — kept compil
 crates/wintercave-server/   the editor: actix-web, HTML rendering, file API
   src/main.rs               binary: flags, bind, print the port
   src/ui.rs                 the page, /api/highlight, /api/complete, the no-JS form
-  src/api.rs                /api/health, /api/files, /api/tree, /api/find, CORS
+  src/api.rs                /api/health, /api/files, /api/tree, /api/find
   src/files.rs              the only module that touches the disk; atomic writes
   src/paths.rs              "inside the root or rejected"
   src/codec.rs              percent and form encoding
@@ -144,7 +144,7 @@ Errors are `{"error": {"code": "...", "message": "..."}}` with stable codes:
 
 ```
 -p, --port <n>      port (default 4173, 0 picks a free port)
-    --host <addr>   bind address (default 0.0.0.0; use 127.0.0.1 to stay local)
+    --host <addr>   bind address (default 127.0.0.1; use 0.0.0.0 to expose on the network)
     --root <dir>    directory the editor may read/write (default .)
     --read-only     open files, refuse writes
     --max-bytes <n> largest file accepted, in bytes
@@ -155,8 +155,9 @@ Errors are `{"error": {"code": "...", "message": "..."}}` with stable codes:
 
 ## Known limitations
 
-- **No auth, no TLS.** It binds `0.0.0.0` by default, like most local dev
-  servers. On a shared machine pass `--host 127.0.0.1`.
+- **No auth, no TLS.** It binds to `127.0.0.1` by default. Passing
+  `--host 0.0.0.0` deliberately exposes the unauthenticated editor to the
+  network; do that only on a trusted network. The file API is same-origin only.
 - **One file at a time.** No tab strip; opening a file is a page load, and the
   folder browser walks one level at a time (quick open does search recursively,
   bounded to six levels and 4 000 entries).

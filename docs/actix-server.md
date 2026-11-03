@@ -8,7 +8,7 @@ crates/wintercave-server/
   src/main.rs      binary: parse flags, bind, print the address
   src/config.rs    flags and environment variables
   src/ui.rs        the editor page (HTML), /api/highlight, /api/complete, the no-JS form
-  src/api.rs       /api/health, /api/files, /api/tree, /api/find, CORS, error bodies
+  src/api.rs       /api/health, /api/files, /api/tree, /api/find, error bodies
   src/files.rs     the only module that touches the disk; atomic writes
   src/paths.rs     path confinement rules
   src/codec.rs     percent / form encoding
@@ -36,13 +36,13 @@ crates/wintercave-server/
 | `DELETE /api/files?path=` | remove a file |
 | `GET /api/tree?path=` | list one directory, folders first |
 
-`OPTIONS` on any `/api/*` route answers `204` with permissive CORS headers; any
+`OPTIONS` on any `/api/*` route answers `204` without CORS permission headers; any
 other method on a known route answers `405` with a JSON body.
 
 ## Rendering the page
 
 There is no template engine. `ui::render` builds the HTML with a `String`, which
-keeps the dependency list to `actix-web`, `serde`, `serde_json` and the engine.
+keeps the dependency list small: `actix-web`, `serde`, `serde_json`, `futures-util` and the engine.
 
 Two details are worth knowing, because both are easy to get wrong:
 
@@ -98,7 +98,7 @@ Without it, the `<form method="post" action="/save?path=…">` still saves.
 
 ```
 -p, --port <n>      port (default 4173, 0 picks a free port)
-    --host <addr>   bind address (default 0.0.0.0)
+    --host <addr>   bind address (default 127.0.0.1; 0.0.0.0 exposes it to the network)
     --root <dir>    directory the editor may read/write (default .)
     --read-only     open files, refuse writes
     --max-bytes <n> largest file accepted, in bytes
@@ -127,7 +127,7 @@ reports its size.
 
 ## Limits
 
-- HTTP only, no auth. `--host 127.0.0.1` if the machine is shared.
+- HTTP only, no auth. It binds to loopback by default; use `--host 0.0.0.0` only to deliberately expose it on a trusted network. API responses do not grant CORS access, and the no-JS save rejects cross-origin form submissions.
 - Disk access blocks the worker; one local user is the design point.
 - No request log, no metrics.
 - One file open at a time; the sidebar lists the root directory only.

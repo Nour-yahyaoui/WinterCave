@@ -92,7 +92,6 @@ impl ResponseError for ServerError {
             .insert_header((header::CONTENT_TYPE, "application/json; charset=utf-8"))
             .insert_header((header::CACHE_CONTROL, "no-store"))
             .insert_header(("X-Content-Type-Options", "nosniff"))
-            .insert_header((header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"))
             .body(self.body().to_string())
     }
 }

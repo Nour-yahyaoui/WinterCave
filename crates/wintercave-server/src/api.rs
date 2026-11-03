@@ -6,7 +6,8 @@
 
 use actix_web::http::header;
 use actix_web::http::StatusCode;
-use actix_web::{web, HttpRequest, HttpResponse};
+use actix_web::{guard, web, HttpRequest, HttpResponse};
+use futures_util::StreamExt;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -31,9 +32,51 @@ pub(crate) fn query_path(query: &PathQuery) -> &str {
     query.path.as_deref().unwrap_or("")
 }
 
+/// Stop DNS-rebinding hosts from turning a loopback editor into a website's
+/// same-origin backend. Localhost names and IP literals remain valid so users
+/// can intentionally open the editor by its local or LAN address.
+pub(crate) fn safe_host(context: &guard::GuardContext) -> bool {
+    let Some(host) = context
+        .head()
+        .headers()
+        .get(header::HOST)
+        .and_then(|value| value.to_str().ok())
+    else {
+        // HTTP/1.0 and in-process tests may omit Host. Browser HTTP/1.1+ always
+        // supplies it; a present but invalid host is rejected below.
+        return true;
+    };
+
+    let hostname = if let Some(bracketed) = host.strip_prefix('[') {
+        let Some((address, suffix)) = bracketed.split_once(']') else {
+            return false;
+        };
+        if !suffix.is_empty() {
+            let Some(port) = suffix.strip_prefix(':') else {
+                return false;
+            };
+            if port.parse::<u16>().is_err() {
+                return false;
+            }
+        }
+        address
+    } else if let Some((hostname, port)) = host.rsplit_once(':') {
+        if hostname.contains(':') || port.parse::<u16>().is_err() {
+            return false;
+        }
+        hostname
+    } else {
+        host
+    };
+
+    let hostname = hostname.trim_end_matches('.').to_ascii_lowercase();
+    hostname == "localhost"
+        || hostname.ends_with(".localhost")
+        || hostname.parse::<std::net::IpAddr>().is_ok()
+}
+
 pub(crate) fn json(status: StatusCode, body: &Value) -> HttpResponse {
     HttpResponse::build(status)
-        .insert_header((header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"))
         .insert_header((header::CONTENT_TYPE, "application/json; charset=utf-8"))
         .insert_header((header::CACHE_CONTROL, "no-store"))
         .insert_header(("X-Content-Type-Options", "nosniff"))
@@ -48,19 +91,26 @@ fn to_value<T: serde::Serialize>(value: &T) -> Result<Value, ServerError> {
     serde_json::to_value(value).map_err(|error| ServerError::internal(error.to_string()))
 }
 
-/// Reject an oversized body before reading it, with our own error code.
-fn ensure_body_size(request: &HttpRequest) -> Result<(), ServerError> {
-    let declared = request
-        .headers()
-        .get(header::CONTENT_LENGTH)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.parse::<u64>().ok());
-    match declared {
-        Some(length) if length > BODY_LIMIT as u64 => {
-            Err(ServerError::too_large("Request body is too large."))
+/// Consume a request body with an explicit bound, including chunked bodies
+/// without a Content-Length header.
+pub(crate) async fn read_limited_payload(
+    mut payload: web::Payload,
+) -> Result<Vec<u8>, ServerError> {
+    let mut body = Vec::new();
+    while let Some(chunk) = payload.next().await {
+        let chunk = chunk.map_err(|_| {
+            ServerError::new(
+                StatusCode::BAD_REQUEST,
+                "bad_body",
+                "Could not read request body.",
+            )
+        })?;
+        if body.len().saturating_add(chunk.len()) > BODY_LIMIT {
+            return Err(ServerError::too_large("Request body is too large."));
         }
-        _ => Ok(()),
+        body.extend_from_slice(&chunk);
     }
+    Ok(body)
 }
 
 /// A JSON object body, or the same errors the TypeScript server produces.
@@ -127,21 +177,19 @@ fn write(
 
 pub async fn put_file(
     state: web::Data<AppState>,
-    request: HttpRequest,
     query: web::Query<PathQuery>,
-    body: web::Bytes,
+    body: web::Payload,
 ) -> Result<HttpResponse, ServerError> {
-    ensure_body_size(&request)?;
+    let body = read_limited_payload(body).await?;
     write(&state, query_path(&query), &body, false)
 }
 
 pub async fn post_file(
     state: web::Data<AppState>,
-    request: HttpRequest,
     query: web::Query<PathQuery>,
-    body: web::Bytes,
+    body: web::Payload,
 ) -> Result<HttpResponse, ServerError> {
-    ensure_body_size(&request)?;
+    let body = read_limited_payload(body).await?;
     write(&state, query_path(&query), &body, true)
 }
 
@@ -167,8 +215,9 @@ pub async fn tree(
 /// with the same subsequence matcher the command palette uses.
 pub async fn find_files(
     state: web::Data<AppState>,
-    body: web::Bytes,
+    body: web::Payload,
 ) -> Result<HttpResponse, ServerError> {
+    let body = read_limited_payload(body).await?;
     let value = parse_body(&body)?;
     let query = value.get("query").and_then(Value::as_str).unwrap_or("");
     let dir = value.get("dir").and_then(Value::as_str).unwrap_or("");
@@ -217,13 +266,7 @@ pub async fn unknown_endpoint(request: HttpRequest) -> HttpResponse {
 }
 
 pub async fn preflight() -> HttpResponse {
-    HttpResponse::NoContent()
-        .insert_header((header::ACCESS_CONTROL_ALLOW_ORIGIN, "*"))
-        .insert_header((
-            header::ACCESS_CONTROL_ALLOW_METHODS,
-            "GET, PUT, POST, DELETE, OPTIONS",
-        ))
-        .insert_header((header::ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type"))
-        .insert_header((header::ACCESS_CONTROL_MAX_AGE, "600"))
-        .finish()
+    // Same-origin only. Deliberately do not advertise CORS permissions: the
+    // editor does not need cross-origin access to its local file API.
+    HttpResponse::NoContent().finish()
 }

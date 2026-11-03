@@ -1,4 +1,4 @@
-//! WinterCave: the editor page and the file API, served locally by actix-web.
+//! WinterCave: the editor page and file API, served locally by actix-web.
 //!
 //! One process, no build step, no client framework. The page is HTML rendered by
 //! [`ui`], the syntax highlighting is `wintercave-core` running on the server,
@@ -9,7 +9,7 @@
 //! GET  /                      the editor page (server rendered)
 //! GET  /assets/editor.js      the thin client
 //! GET  /assets/editor.css     the stylesheet
-//! POST /save?path=            the no-JavaScript form save
+//! POST /save?path=            the no-JavaScript save (form body)
 //! POST /api/highlight         text in, highlighted HTML out
 //! POST /api/complete          text in, suggestions for the caret out
 //! POST /api/find              quick open: rank files below a folder
@@ -46,51 +46,55 @@ pub const BODY_LIMIT: usize = 12_000_000;
 /// tests build exactly the same application.
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
-        web::scope("/api")
+        web::scope("")
+            .guard(guard::fn_guard(api::safe_host))
             .service(
-                web::resource("/health")
-                    .route(web::get().to(api::health))
-                    .route(web::route().guard(guard::Options()).to(api::preflight))
-                    .route(web::route().to(api::method_not_allowed)),
+                web::scope("/api")
+                    .service(
+                        web::resource("/health")
+                            .route(web::get().to(api::health))
+                            .route(web::route().guard(guard::Options()).to(api::preflight))
+                            .route(web::route().to(api::method_not_allowed)),
+                    )
+                    .service(
+                        web::resource("/files")
+                            .route(web::get().to(api::read_file))
+                            .route(web::put().to(api::put_file))
+                            .route(web::post().to(api::post_file))
+                            .route(web::delete().to(api::delete_file))
+                            .route(web::route().guard(guard::Options()).to(api::preflight))
+                            .route(web::route().to(api::method_not_allowed)),
+                    )
+                    .service(
+                        web::resource("/tree")
+                            .route(web::get().to(api::tree))
+                            .route(web::route().guard(guard::Options()).to(api::preflight))
+                            .route(web::route().to(api::method_not_allowed)),
+                    )
+                    .service(
+                        web::resource("/highlight")
+                            .route(web::post().to(ui::highlight_handler))
+                            .route(web::route().guard(guard::Options()).to(api::preflight))
+                            .route(web::route().to(api::method_not_allowed)),
+                    )
+                    .service(
+                        web::resource("/complete")
+                            .route(web::post().to(ui::complete_handler))
+                            .route(web::route().guard(guard::Options()).to(api::preflight))
+                            .route(web::route().to(api::method_not_allowed)),
+                    )
+                    .service(
+                        web::resource("/find")
+                            .route(web::post().to(api::find_files))
+                            .route(web::route().guard(guard::Options()).to(api::preflight))
+                            .route(web::route().to(api::method_not_allowed)),
+                    )
+                    .default_service(web::to(api::unknown_endpoint)),
             )
-            .service(
-                web::resource("/files")
-                    .route(web::get().to(api::read_file))
-                    .route(web::put().to(api::put_file))
-                    .route(web::post().to(api::post_file))
-                    .route(web::delete().to(api::delete_file))
-                    .route(web::route().guard(guard::Options()).to(api::preflight))
-                    .route(web::route().to(api::method_not_allowed)),
-            )
-            .service(
-                web::resource("/tree")
-                    .route(web::get().to(api::tree))
-                    .route(web::route().guard(guard::Options()).to(api::preflight))
-                    .route(web::route().to(api::method_not_allowed)),
-            )
-            .service(
-                web::resource("/highlight")
-                    .route(web::post().to(ui::highlight_handler))
-                    .route(web::route().guard(guard::Options()).to(api::preflight))
-                    .route(web::route().to(api::method_not_allowed)),
-            )
-            .service(
-                web::resource("/complete")
-                    .route(web::post().to(ui::complete_handler))
-                    .route(web::route().guard(guard::Options()).to(api::preflight))
-                    .route(web::route().to(api::method_not_allowed)),
-            )
-            .service(
-                web::resource("/find")
-                    .route(web::post().to(api::find_files))
-                    .route(web::route().guard(guard::Options()).to(api::preflight))
-                    .route(web::route().to(api::method_not_allowed)),
-            )
-            .default_service(web::to(api::unknown_endpoint)),
+            .service(web::resource("/").route(web::get().to(ui::page)))
+            .service(web::resource("/save").route(web::post().to(ui::save_form)))
+            .service(web::resource("/assets/editor.js").route(web::get().to(assets::serve_js)))
+            .service(web::resource("/assets/editor.css").route(web::get().to(assets::serve_css))),
     )
-    .service(web::resource("/").route(web::get().to(ui::page)))
-    .service(web::resource("/save").route(web::post().to(ui::save_form)))
-    .service(web::resource("/assets/editor.js").route(web::get().to(assets::serve_js)))
-    .service(web::resource("/assets/editor.css").route(web::get().to(assets::serve_css)))
     .default_service(web::to(ui::not_found));
 }
