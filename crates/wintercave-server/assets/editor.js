@@ -22,17 +22,20 @@
   function storedTheme() {
     try {
       const value = localStorage.getItem(STORAGE_KEY);
-      return value === 'light' || value === 'dark' ? value : '';
+      return value === 'light' || value === 'dark' || value === 'system' ? value : '';
     } catch {
       return '';
     }
   }
 
   function applyTheme(theme, remember) {
-    root.dataset.theme = theme === 'light' ? 'light' : 'dark';
+    const resolved = theme === 'system'
+      ? (themeMedia && themeMedia.matches ? 'light' : 'dark')
+      : (theme === 'light' ? 'light' : 'dark');
+    root.dataset.theme = resolved;
     if (remember) {
       try {
-        localStorage.setItem(STORAGE_KEY, root.dataset.theme);
+        localStorage.setItem(STORAGE_KEY, theme === 'system' ? 'system' : resolved);
       } catch {
         /* private mode: the choice just does not persist */
       }
@@ -46,19 +49,129 @@
     }
   }
 
-  // The inline <head> script already chose; this only syncs the button.
-  applyTheme(root.dataset.theme === 'light' ? 'light' : 'dark', false);
+  // The inline <head> script already chose; this syncs controls and supports
+  // following the system appearance when that preference is selected.
+  const initialTheme = storedTheme() || 'system';
+  applyTheme(initialTheme, false);
 
   if (themeButton) {
     themeButton.addEventListener('click', () => {
       applyTheme(root.dataset.theme === 'light' ? 'dark' : 'light', true);
+      if (themeSelect) themeSelect.value = storedTheme() || root.dataset.theme;
     });
   }
 
   if (themeMedia && themeMedia.addEventListener) {
-    themeMedia.addEventListener('change', (event) => {
-      // An explicit choice wins over the system; otherwise follow the system.
-      if (!storedTheme()) applyTheme(event.matches ? 'light' : 'dark', false);
+    themeMedia.addEventListener('change', () => {
+      const choice = storedTheme();
+      if (!choice || choice === 'system') applyTheme('system', false);
+    });
+  }
+
+  const settingsDialog = document.getElementById('settings');
+  const aboutDialog = document.getElementById('about');
+  const settingsButton = document.getElementById('open-settings');
+  const aboutButton = document.getElementById('open-about');
+  const themeSelect = document.getElementById('setting-theme');
+  const fontSizeSelect = document.getElementById('setting-font-size');
+  const tabSizeSelect = document.getElementById('setting-tab-size');
+  const wrapSelect = document.getElementById('setting-wrap');
+
+  function readPreference(key, allowed, fallback) {
+    try {
+      const value = localStorage.getItem('wintercave.' + key);
+      return allowed.includes(value) ? value : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  function savePreference(key, value) {
+    try { localStorage.setItem('wintercave.' + key, value); } catch { /* storage is optional */ }
+  }
+
+  if (themeSelect) {
+    themeSelect.value = initialTheme;
+    themeSelect.addEventListener('change', () => applyTheme(themeSelect.value, true));
+  }
+  if (fontSizeSelect) {
+    fontSizeSelect.value = readPreference('font-size', ['12', '13', '14', '15', '16', '18'], '13');
+    root.style.setProperty('--editor-size', fontSizeSelect.value + 'px');
+    fontSizeSelect.addEventListener('change', () => {
+      root.style.setProperty('--editor-size', fontSizeSelect.value + 'px');
+      savePreference('font-size', fontSizeSelect.value);
+    });
+  }
+  if (tabSizeSelect) {
+    tabSizeSelect.value = readPreference('tab-size', ['2', '4', '8'], '2');
+    root.style.setProperty('--editor-tab-size', tabSizeSelect.value);
+    tabSizeSelect.addEventListener('change', () => {
+      root.style.setProperty('--editor-tab-size', tabSizeSelect.value);
+      savePreference('tab-size', tabSizeSelect.value);
+    });
+  }
+  if (wrapSelect) {
+    wrapSelect.checked = readPreference('wrap', ['true', 'false'], 'false') === 'true';
+    wrapSelect.addEventListener('change', () => {
+      document.querySelector('.wrap')?.classList.toggle('wrapped', wrapSelect.checked);
+      savePreference('wrap', String(wrapSelect.checked));
+    });
+  }
+  document.querySelector('.wrap')?.classList.toggle('wrapped', wrapSelect && wrapSelect.checked);
+
+  if (settingsButton && settingsDialog) settingsButton.addEventListener('click', () => settingsDialog.showModal());
+  if (aboutButton && aboutDialog) aboutButton.addEventListener('click', () => aboutDialog.showModal());
+
+  /* ---- sidebar resize ----------------------------------------------- */
+  const resizeHandle = document.getElementById('sidebar-resize');
+  const MIN_SIDEBAR = 200;
+  const MAX_SIDEBAR = 520;
+  const SIDEBAR_KEY = 'wintercave.sidebar-width';
+
+  function setSidebarWidth(value, persist) {
+    const max = Math.min(MAX_SIDEBAR, Math.max(MIN_SIDEBAR, window.innerWidth - 320));
+    const width = Math.round(Math.max(MIN_SIDEBAR, Math.min(max, value)));
+    root.style.setProperty('--sidebar-width', width + 'px');
+    if (resizeHandle) resizeHandle.setAttribute('aria-valuenow', String(width));
+    if (persist) savePreference('sidebar-width', String(width));
+  }
+
+  let storedWidth = '262';
+  try { storedWidth = localStorage.getItem('wintercave.sidebar-width') || storedWidth; } catch { /* storage is optional */ }
+  const parsedWidth = Number.parseInt(storedWidth, 10);
+  setSidebarWidth(Number.isFinite(parsedWidth) ? parsedWidth : 262, false);
+
+  if (resizeHandle) {
+    let resizing = false;
+    resizeHandle.addEventListener('pointerdown', (event) => {
+      if (window.innerWidth <= 720) return;
+      resizing = true;
+      resizeHandle.setPointerCapture(event.pointerId);
+      document.body.classList.add('is-resizing');
+      setSidebarWidth(event.clientX, false);
+      event.preventDefault();
+    });
+    resizeHandle.addEventListener('pointermove', (event) => {
+      if (resizing) setSidebarWidth(event.clientX, false);
+    });
+    const finishResize = () => {
+      if (!resizing) return;
+      resizing = false;
+      document.body.classList.remove('is-resizing');
+      const width = Number.parseInt(getComputedStyle(root).getPropertyValue('--sidebar-width'), 10);
+      setSidebarWidth(width, true);
+    };
+    resizeHandle.addEventListener('pointerup', finishResize);
+    resizeHandle.addEventListener('pointercancel', finishResize);
+    resizeHandle.addEventListener('keydown', (event) => {
+      const current = Number.parseInt(getComputedStyle(root).getPropertyValue('--sidebar-width'), 10);
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        event.preventDefault();
+        setSidebarWidth(current + (event.key === 'ArrowRight' ? 16 : -16), true);
+      } else if (event.key === 'Home' || event.key === 'End') {
+        event.preventDefault();
+        setSidebarWidth(event.key === 'Home' ? MIN_SIDEBAR : MAX_SIDEBAR, true);
+      }
     });
   }
 
@@ -72,10 +185,14 @@
 
   if (!textarea || !highlight) return;
 
-  const path = body.dataset.path || '';
+  let path = body.dataset.path || '';
   const folder = body.dataset.dir || '';
-  const language = body.dataset.language || 'plaintext';
-  const readOnly = body.dataset.readOnly === 'true';
+  let language = body.dataset.language || 'plaintext';
+  let readOnly = body.dataset.readOnly === 'true';
+  let localRootHandle = null;
+  let activeFileHandle = null;
+  let externalMode = false;
+  const localFileHandles = new Map();
   const MAX_HIGHLIGHT = 400000;
 
   // The script is alive: the no-JavaScript save button is not needed any more.
@@ -165,22 +282,30 @@
     saveInFlight = true;
     setStatus('saving…', 'dirty');
     try {
-      const response = await fetch('/api/files?path=' + encodeURIComponent(path), {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text: snapshot }),
-      });
-      if (!response.ok) {
-        const problem = await response.json().catch(() => ({}));
-        setStatus((problem.error && problem.error.message) || 'save failed', 'warn');
-      } else {
-        // Only mark the bytes sent in this request as saved. If typing continued
-        // while it was in flight, refreshStatus leaves the new buffer dirty.
+      if (activeFileHandle) {
+        const writable = await activeFileHandle.createWritable();
+        await writable.write(snapshot);
+        await writable.close();
         saved = snapshot;
         refreshStatus();
+      } else {
+        const response = await fetch('/api/files?path=' + encodeURIComponent(path), {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ text: snapshot }),
+        });
+        if (!response.ok) {
+          const problem = await response.json().catch(() => ({}));
+          setStatus((problem.error && problem.error.message) || 'save failed', 'warn');
+        } else {
+          // Only mark the bytes sent in this request as saved. If typing continued
+          // while it was in flight, refreshStatus leaves the new buffer dirty.
+          saved = snapshot;
+          refreshStatus();
+        }
       }
-    } catch {
-      setStatus('save failed', 'warn');
+    } catch (error) {
+      setStatus(error && error.message ? 'save failed: ' + error.message : 'save failed', 'warn');
     } finally {
       saveInFlight = false;
       if (saveQueued) {
@@ -382,6 +507,218 @@
     completionTimer = setTimeout(() => requestCompletion(false), 110);
   }
 
+  /* ---- local folders selected by the user ----------------------------- */
+
+  const localFolderButton = document.getElementById('open-local-folder');
+  const workspaceFiles = document.getElementById('workspace-files');
+  const workspaceCrumbs = document.getElementById('workspace-crumbs');
+  const workspaceRoot = document.getElementById('workspace-root');
+  const currentName = document.getElementById('current-name');
+  const currentLanguage = document.getElementById('current-language');
+  const languageDisplay = document.getElementById('language-display');
+
+  function localLanguage(filename) {
+    const extension = filename.toLowerCase().split('.').pop();
+    const languages = {
+      rs: 'rust', js: 'javascript', jsx: 'javascript', ts: 'typescript', tsx: 'typescript',
+      py: 'python', sh: 'shell', bash: 'shell', yml: 'yaml', yaml: 'yaml', sql: 'sql',
+      json: 'json', html: 'html', htm: 'html', css: 'css', md: 'markdown', mdx: 'markdown',
+    };
+    return languages[extension] || 'plaintext';
+  }
+
+  async function localDirectoryAt(relative) {
+    let directory = localRootHandle;
+    for (const part of (relative || '').split('/').filter(Boolean)) {
+      directory = await directory.getDirectoryHandle(part);
+    }
+    return directory;
+  }
+
+  function paintLocalCrumbs(relative) {
+    if (!workspaceCrumbs || !localRootHandle) return;
+    workspaceCrumbs.textContent = '';
+    const rootLink = document.createElement('a');
+    rootLink.href = '#';
+    rootLink.textContent = localRootHandle.name;
+    rootLink.addEventListener('click', (event) => {
+      event.preventDefault();
+      renderLocalFolder('');
+    });
+    workspaceCrumbs.appendChild(rootLink);
+    let walked = '';
+    relative.split('/').filter(Boolean).forEach((part) => {
+      walked = walked ? walked + '/' + part : part;
+      const crumb = document.createElement('a');
+      crumb.href = '#';
+      crumb.textContent = part;
+      crumb.addEventListener('click', (event) => {
+        event.preventDefault();
+        renderLocalFolder(walked);
+      });
+      const separator = document.createElement('span');
+      separator.className = 'sep';
+      separator.textContent = '/';
+      workspaceCrumbs.append(separator, crumb);
+    });
+  }
+
+  async function renderLocalFolder(relative) {
+    if (!localRootHandle || !workspaceFiles) return;
+    try {
+      const directory = await localDirectoryAt(relative);
+      const entries = [];
+      for await (const [name, handle] of directory.entries()) {
+        entries.push({ name, handle, kind: handle.kind });
+      }
+      entries.sort((a, b) => {
+        if (a.kind !== b.kind) return a.kind === 'directory' ? -1 : 1;
+        return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+      });
+
+      workspaceFiles.textContent = '';
+      localFileHandles.clear();
+      if (relative) {
+        const parent = relative.includes('/') ? relative.slice(0, relative.lastIndexOf('/')) : '';
+        const up = document.createElement('li');
+        const link = document.createElement('a');
+        link.className = 'dir up';
+        link.href = '#';
+        link.dataset.localDirectory = parent;
+        link.textContent = '../';
+        up.appendChild(link);
+        workspaceFiles.appendChild(up);
+      }
+      for (const entry of entries) {
+        const entryPath = relative ? relative + '/' + entry.name : entry.name;
+        const row = document.createElement('li');
+        const link = document.createElement('a');
+        link.href = '#';
+        link.textContent = entry.kind === 'directory' ? entry.name + '/' : entry.name;
+        if (entry.kind === 'directory') {
+          link.className = 'dir';
+          link.dataset.localDirectory = entryPath;
+        } else {
+          link.className = 'file';
+          link.dataset.localFile = entryPath;
+          localFileHandles.set(entryPath, entry.handle);
+          if (entryPath === path) link.classList.add('current');
+        }
+        row.appendChild(link);
+        workspaceFiles.appendChild(row);
+      }
+      if (!entries.length) {
+        const empty = document.createElement('li');
+        empty.className = 'empty';
+        empty.textContent = 'no files here';
+        workspaceFiles.appendChild(empty);
+      }
+      browseDir = relative;
+      paintLocalCrumbs(relative);
+      if (workspaceRoot) {
+        workspaceRoot.textContent = localRootHandle.name;
+        workspaceRoot.title = 'Folder selected in this browser';
+      }
+    } catch (error) {
+      setStatus('Could not read that folder', 'warn');
+    }
+  }
+
+  async function openLocalFile(relative) {
+    const handle = localFileHandles.get(relative);
+    if (!handle) return;
+    if (saveInFlight) {
+      setStatus('Wait for the current save to finish', 'warn');
+      return;
+    }
+    if (dirty() && !window.confirm('Discard unsaved changes and open another file?')) return;
+    try {
+      const file = await handle.getFile();
+      if (file.size > 10000000) {
+        setStatus('File exceeds the 10 MB editor limit', 'warn');
+        return;
+      }
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      if (bytes.subarray(0, Math.min(bytes.length, 8000)).includes(0)) {
+        setStatus('That file looks binary', 'warn');
+        return;
+      }
+      let text;
+      try {
+        text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      } catch {
+        setStatus('That file is not valid UTF-8', 'warn');
+        return;
+      }
+      generation += 1;
+      activeFileHandle = handle;
+      path = relative;
+      language = localLanguage(file.name);
+      readOnly = false;
+      textarea.value = text;
+      saved = text;
+      if (currentName) currentName.textContent = file.name;
+      if (currentLanguage) currentLanguage.textContent = language;
+      if (languageDisplay) languageDisplay.textContent = language;
+      renderLocalFolder(relative.includes('/') ? relative.slice(0, relative.lastIndexOf('/')) : '');
+      refreshStatus();
+      updatePosition();
+      hideCompletion();
+      schedule();
+      textarea.focus();
+    } catch (error) {
+      setStatus('Could not open file: ' + (error.message || 'permission denied'), 'warn');
+    }
+  }
+
+  async function chooseLocalFolder() {
+    if (saveInFlight) {
+      setStatus('Wait for the current save to finish', 'warn');
+      return;
+    }
+    if (typeof window.showDirectoryPicker !== 'function') {
+      setStatus('Choose a folder from this PC in Chrome or Edge', 'warn');
+      return;
+    }
+    if (dirty() && !window.confirm('Discard unsaved changes and choose another folder?')) return;
+    try {
+      localRootHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+      externalMode = true;
+      generation += 1;
+      activeFileHandle = null;
+      path = '';
+      language = 'plaintext';
+      readOnly = false;
+      textarea.value = '';
+      saved = '';
+      if (currentName) currentName.textContent = 'no file open';
+      if (currentLanguage) currentLanguage.textContent = language;
+      if (languageDisplay) languageDisplay.textContent = language;
+      if (workspaceFiles) workspaceFiles.dataset.source = 'local';
+      refreshStatus();
+      updatePosition();
+      renderLocalFolder('');
+      schedule();
+    } catch (error) {
+      if (error.name !== 'AbortError') setStatus('Folder access was not granted', 'warn');
+    }
+  }
+
+  if (localFolderButton) localFolderButton.addEventListener('click', chooseLocalFolder);
+  if (workspaceFiles) {
+    workspaceFiles.addEventListener('click', (event) => {
+      const link = event.target.closest('a');
+      if (!link || !externalMode) return;
+      if (link.dataset.localDirectory !== undefined) {
+        event.preventDefault();
+        renderLocalFolder(link.dataset.localDirectory);
+      } else if (link.dataset.localFile) {
+        event.preventDefault();
+        openLocalFile(link.dataset.localFile);
+      }
+    });
+  }
+
   /* ---- open file (quick open) ------------------------------------------ */
 
   const quickDialog = document.getElementById('quick-open');
@@ -393,7 +730,12 @@
   let quickTimer = 0;
   let quickToken = 0;
 
-  function goToFile(relative) {
+  async function goToFile(relative) {
+    if (externalMode) {
+      await openLocalFile(relative);
+      if (quickDialog) quickDialog.close();
+      return;
+    }
     const parameters = new URLSearchParams();
     parameters.set('path', relative);
     const cut = relative.lastIndexOf('/');
@@ -450,6 +792,15 @@
 
   async function searchFiles(query) {
     const token = ++quickToken;
+    if (externalMode) {
+      const needle = query.toLocaleLowerCase();
+      const matches = Array.from(localFileHandles.keys())
+        .filter((itemPath) => !needle || itemPath.toLocaleLowerCase().includes(needle))
+        .slice(0, 60)
+        .map((itemPath) => ({ path: itemPath, name: itemPath.split('/').pop() }));
+      paintQuickResults(matches, 'no files in this folder match');
+      return;
+    }
     try {
       const response = await fetch('/api/find', {
         method: 'POST',

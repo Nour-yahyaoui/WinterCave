@@ -52,11 +52,18 @@ walks folders (`GET /api/tree`) and opens the one you choose. Both are server
 rendered as links first: with JavaScript off you still navigate, just without the
 palette.
 
-**Light and dark** — one token set, two palettes. The choice is saved in
-`localStorage['wintercave.theme']`; with nothing saved the page follows
-`prefers-color-scheme`. An inline script in `<head>` applies the answer before
-the stylesheet paints, so the wrong theme never flashes on load. The toggle is a
-button in the header (`aria-pressed` tracks it), and the fallback is CSS-only.
+**Light and dark** — one token set, two palettes. The Settings panel offers
+system, light and dark themes, editor font size, tab width and line wrapping.
+Preferences are saved in local storage. The sidebar can be resized with its
+keyboard-accessible divider; its width is remembered too.
+
+**Folders on this PC** — “Choose folder on this PC” uses the browser's native
+directory permission picker (Chrome or Edge on localhost). The browser grants
+access only to the folder the user chooses; files are read and saved through
+that permission. Text is sent only to the local server for Rust highlighting
+and completion; it is not sent to a remote service. Quick open searches the
+currently displayed folder. Browsers without the File System Access API can
+launch the server with `--root <folder>` instead.
 
 **Completion** — `POST /api/complete` returns keyword, constant and
 buffer-identifier suggestions for the caret, ranked prefix-first then by
@@ -113,9 +120,10 @@ crates/wintercave-server/   the editor: actix-web, HTML rendering, file API
 docs/                       the actix server, the original feature plan
 ```
 
-The server is the only place with I/O. `wintercave-core` has no filesystem, no
-DOM and no async runtime, so the same code can drive a terminal or native window
-later; today the server is the shell.
+The server owns workspace I/O. When a user explicitly selects a local folder,
+the browser's File System Access API handles that folder directly under its
+permission grant. `wintercave-core` has no filesystem, no DOM and no async
+runtime, so the same code can drive a terminal or native window later.
 
 ## The API
 

@@ -266,6 +266,9 @@ async fn serves_the_client_script_and_stylesheet_with_etags() {
         .to_string();
     let body = text_body(script).await;
     assert!(body.contains("/api/highlight"));
+    assert!(body.contains("showDirectoryPicker"));
+    assert!(body.contains("createWritable"));
+    assert!(body.contains("sidebar-width"));
 
     let revalidated = test::call_service(
         &app,
@@ -912,7 +915,11 @@ async fn page_renders_the_folder_theme_and_completion_controls() {
     let body = text_body(response).await;
 
     assert!(body.contains("Open file…"), "no quick open button");
-    assert!(body.contains("Open folder…"), "no folder button");
+    assert!(body.contains("Browse workspace…"), "no workspace browser button");
+    assert!(body.contains("Choose folder on this PC…"), "no local folder picker");
+    assert!(body.contains("id=\"sidebar-resize\""), "no sidebar resize handle");
+    assert!(body.contains("id=\"settings\""), "no settings dialog");
+    assert!(body.contains("id=\"about\""), "no about dialog");
     assert!(body.contains("id=\"theme-toggle\""), "no theme toggle");
     assert!(body.contains("id=\"completion\""), "no completion listbox");
     assert!(body.contains("id=\"quick-open\""), "no quick open dialog");

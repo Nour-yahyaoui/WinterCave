@@ -42,6 +42,10 @@
 
   --mono: 13px/1.55 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --label: 11px/1.4 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --sidebar-width: 262px;
+  --editor-size: 13px;
+  --editor-line-height: 1.55;
+  --editor-tab-size: 2;
   --radius: 2px;
 }
 
@@ -110,8 +114,8 @@ kbd {
 /* ---- sidebar -------------------------------------------------------- */
 
 .tree {
-  width: 262px;
-  flex: 0 0 262px;
+  width: var(--sidebar-width);
+  flex: 0 0 var(--sidebar-width);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -239,6 +243,32 @@ button.action.primary:hover {
 
 .root { padding-top: 6px; border-top: 1px solid var(--line); }
 
+/* ---- sidebar resizing ----------------------------------------------- */
+
+.sidebar-resize {
+  position: relative;
+  z-index: 4;
+  flex: 0 0 5px;
+  margin-left: -2px;
+  margin-right: -3px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.sidebar-resize::after {
+  content: "";
+  position: absolute;
+  inset: 0 2px;
+  background: transparent;
+}
+
+.sidebar-resize:hover::after,
+.sidebar-resize:focus-visible::after,
+body.is-resizing .sidebar-resize::after { background: var(--accent); }
+
+body.is-resizing { cursor: col-resize; user-select: none; }
+
 /* ---- editor --------------------------------------------------------- */
 
 .pane {
@@ -297,11 +327,19 @@ button.theme[aria-pressed="true"] { color: var(--accent); border-color: var(--ac
   margin: 0;
   padding: 16px 18px;
   border: 0;
-  font: var(--mono);
-  tab-size: 2;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: var(--editor-size);
+  line-height: var(--editor-line-height);
+  tab-size: var(--editor-tab-size);
   white-space: pre;
   overflow: auto;
   word-wrap: normal;
+}
+
+.wrap.wrapped .layer {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .highlight {
@@ -442,6 +480,44 @@ dialog.sheet::backdrop { background: rgba(4, 10, 13, 0.55); }
 
 .sheet-head .close:hover { color: var(--accent); border-color: var(--accent); }
 
+.settings-body,
+.about-body {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.setting-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) minmax(140px, 1fr);
+  align-items: center;
+  gap: 12px;
+  color: var(--text);
+  font: 13px/1.4 system-ui, sans-serif;
+}
+
+.setting-row select {
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--panel-hi);
+  color: var(--text);
+  font: 13px/1.4 system-ui, sans-serif;
+}
+
+.setting-row input[type="checkbox"] { accent-color: var(--accent); }
+
+.settings-note,
+.about-body p {
+  margin: 0;
+  color: var(--muted);
+  font: 12px/1.55 system-ui, sans-serif;
+}
+
+.about-body h2 { margin: 0; font-size: 19px; }
+.about-body a { color: var(--accent); }
+
 #quick-input {
   width: 100%;
   padding: 10px 12px;
@@ -563,6 +639,7 @@ body.error h1 {
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
+  .sidebar-resize { display: none; }
   .status .keys { display: none; }
   .completion { max-width: calc(100% - 16px); }
 }
