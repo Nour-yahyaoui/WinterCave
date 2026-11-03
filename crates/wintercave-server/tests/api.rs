@@ -71,7 +71,6 @@ macro_rules! service {
     ($fixture:expr, $read_only:expr) => {{
         let app = App::new()
             .app_data(web::Data::new($fixture.state($read_only)))
-            .app_data(web::PayloadConfig::new(BODY_LIMIT))
             .configure(configure);
         test::init_service(app).await
     }};
@@ -81,7 +80,6 @@ macro_rules! service_with {
     ($state:expr) => {{
         let app = App::new()
             .app_data(web::Data::new($state))
-            .app_data(web::PayloadConfig::new(BODY_LIMIT))
             .configure(configure);
         test::init_service(app).await
     }};
@@ -358,6 +356,28 @@ async fn highlight_refuses_enormous_documents() {
     assert_eq!(body["error"]["code"], Value::String("too_large".to_string()));
 }
 
+#[actix_web::test]
+async fn rejects_oversized_bodies_without_a_content_length_header() {
+    let fixture = Fixture::new("body-limit");
+    let app = service!(fixture, false);
+    let payload = vec![b' '; BODY_LIMIT + 1];
+
+    let response = test::call_service(
+        &app,
+        test::TestRequest::post()
+            .uri("/api/find")
+            .insert_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(payload)
+            .to_request(),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(
+        json_body(response).await["error"]["code"],
+        Value::String("too_large".to_string())
+    );
+}
+
 // ---------------------------------------------------------------------------
 // the no-JavaScript form
 // ---------------------------------------------------------------------------
@@ -394,6 +414,31 @@ async fn form_save_writes_the_file_and_redirects_back() {
 }
 
 #[actix_web::test]
+async fn form_save_rejects_cross_origin_submissions() {
+    let fixture = Fixture::new("form-origin");
+    let app = service!(fixture, false);
+
+    let response = test::call_service(
+        &app,
+        test::TestRequest::post()
+            .uri("/save?path=notes.md")
+            .insert_header((header::ORIGIN, "https://attacker.example"))
+            .set_payload("text=forged")
+            .to_request(),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        json_body(response).await["error"]["code"],
+        Value::String("bad_origin".to_string())
+    );
+    assert_eq!(
+        std::fs::read_to_string(fixture.path("notes.md")).unwrap(),
+        "# hello\n\nworld\n"
+    );
+}
+
+#[actix_web::test]
 async fn form_save_respects_read_only() {
     let fixture = Fixture::new("form-readonly");
     let app = service!(fixture, true);
@@ -412,6 +457,32 @@ async fn form_save_respects_read_only() {
 // ---------------------------------------------------------------------------
 // the file API
 // ---------------------------------------------------------------------------
+
+#[actix_web::test]
+async fn rejects_non_local_hostnames_to_prevent_dns_rebinding() {
+    let fixture = Fixture::new("host-guard");
+    let app = service!(fixture, false);
+
+    let rebound = test::call_service(
+        &app,
+        test::TestRequest::get()
+            .uri("/api/health")
+            .insert_header((header::HOST, "attacker.example"))
+            .to_request(),
+    )
+    .await;
+    assert_eq!(rebound.status(), StatusCode::NOT_FOUND);
+
+    let local = test::call_service(
+        &app,
+        test::TestRequest::get()
+            .uri("/api/health")
+            .insert_header((header::HOST, "localhost:4173"))
+            .to_request(),
+    )
+    .await;
+    assert_eq!(local.status(), StatusCode::OK);
+}
 
 #[actix_web::test]
 async fn health_reports_the_server_contract() {
@@ -499,6 +570,40 @@ async fn missing_files_and_directories_report_distinct_codes() {
         body["error"]["code"],
         Value::String("is_a_directory".to_string())
     );
+}
+
+#[cfg(unix)]
+#[actix_web::test]
+async fn refuses_file_and_directory_symlinks_that_escape_the_workspace() {
+    use std::os::unix::fs::symlink;
+
+    let fixture = Fixture::new("symlink-escape");
+    let outside = fixture.base.join("outside");
+    std::fs::create_dir_all(&outside).unwrap();
+    std::fs::write(outside.join("secret.txt"), "outside secret").unwrap();
+    symlink(outside.join("secret.txt"), fixture.path("linked.txt")).unwrap();
+    symlink(&outside, fixture.path("linked-dir")).unwrap();
+    let app = service!(fixture, false);
+
+    let read = test::call_service(
+        &app,
+        test::TestRequest::get()
+            .uri("/api/files?path=linked.txt")
+            .to_request(),
+    )
+    .await;
+    assert_eq!(read.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(json_body(read).await["error"]["code"], "bad_path");
+
+    let list = test::call_service(
+        &app,
+        test::TestRequest::get()
+            .uri("/api/tree?path=linked-dir")
+            .to_request(),
+    )
+    .await;
+    assert_eq!(list.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(json_body(list).await["error"]["code"], "bad_path");
 }
 
 #[actix_web::test]
@@ -776,7 +881,7 @@ async fn unknown_endpoints_and_methods_are_reported() {
 }
 
 #[actix_web::test]
-async fn preflight_answers_options_with_cors_headers() {
+async fn preflight_does_not_grant_cross_origin_access() {
     let fixture = Fixture::new("preflight");
     let app = service!(fixture, false);
 
@@ -789,13 +894,8 @@ async fn preflight_answers_options_with_cors_headers() {
     )
     .await;
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
-    assert_eq!(
-        response
-            .headers()
-            .get(header::ACCESS_CONTROL_ALLOW_METHODS)
-            .and_then(|value| value.to_str().ok()),
-        Some("GET, PUT, POST, DELETE, OPTIONS")
-    );
+    assert!(response.headers().get(header::ACCESS_CONTROL_ALLOW_ORIGIN).is_none());
+    assert!(response.headers().get(header::ACCESS_CONTROL_ALLOW_METHODS).is_none());
 }
 
 // ---------------------------------------------------------------------------

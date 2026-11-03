@@ -8,17 +8,17 @@ WinterCave — the local editor server
 Usage: wintercave-server [options]
 
   -p, --port <n>      port to listen on (default 4173, or $PORT; 0 picks a free port)
-      --host <addr>   address to bind (default 0.0.0.0, or $HOST)
+      --host <addr>   address to bind (default 127.0.0.1, or $HOST)
       --root <dir>    directory the editor may read/write (default .)
       --read-only     open files, refuse writes
       --max-bytes <n> largest file accepted, in bytes
   -h, --help          show this help
 
-Point a browser at the printed address, or pass --host 127.0.0.1 to keep the
-server off the network entirely.";
+Point a browser at the printed address. Use --host 0.0.0.0 only when you
+intentionally want other devices on the network to reach this unauthenticated server.";
 
 pub const DEFAULT_PORT: u16 = 4173;
-pub const DEFAULT_HOST: &str = "0.0.0.0";
+pub const DEFAULT_HOST: &str = "127.0.0.1";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {

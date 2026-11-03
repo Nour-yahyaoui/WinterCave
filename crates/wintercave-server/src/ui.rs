@@ -14,7 +14,7 @@ use wintercave_core::language::{
     flatten_tokens, get_language, language_for_filename, tokenize_line, HighlightState,
 };
 
-use crate::api::{json, parse_body, AppState, PathQuery};
+use crate::api::{json, parse_body, read_limited_payload, AppState, PathQuery};
 use crate::codec;
 use crate::error::ServerError;
 use crate::files::{FileRecord, TreeEntry};
@@ -419,8 +419,9 @@ fn language_from_body(value: &Value) -> &'static str {
 /// `POST /api/highlight` — the page asks for highlighted HTML after a keystroke.
 pub async fn highlight_handler(
     _state: web::Data<AppState>,
-    body: web::Bytes,
+    body: web::Payload,
 ) -> Result<HttpResponse, ServerError> {
+    let body = read_limited_payload(body).await?;
     let value = parse_body(&body)?;
     let text = value.get("text").and_then(Value::as_str).unwrap_or("");
     if text.len() > MAX_HIGHLIGHT_BYTES {
@@ -440,8 +441,9 @@ pub async fn highlight_handler(
 /// `POST /api/complete` — keyword and buffer-word suggestions for the caret.
 pub async fn complete_handler(
     _state: web::Data<AppState>,
-    body: web::Bytes,
+    body: web::Payload,
 ) -> Result<HttpResponse, ServerError> {
+    let body = read_limited_payload(body).await?;
     let value = parse_body(&body)?;
     let text = value.get("text").and_then(Value::as_str).unwrap_or("");
     if text.len() > MAX_HIGHLIGHT_BYTES {
@@ -479,9 +481,25 @@ pub async fn complete_handler(
 /// browser lands back on the editor.
 pub async fn save_form(
     state: web::Data<AppState>,
+    request: HttpRequest,
     query: web::Query<PathQuery>,
-    body: web::Bytes,
+    body: web::Payload,
 ) -> Result<HttpResponse, ServerError> {
+    if let Some(origin) = request.headers().get(header::ORIGIN) {
+        let origin = origin.to_str().map_err(|_| {
+            ServerError::new(StatusCode::FORBIDDEN, "bad_origin", "Request origin is not allowed.")
+        })?;
+        let connection = request.connection_info();
+        let expected = format!("{}://{}", connection.scheme(), connection.host());
+        if origin != expected {
+            return Err(ServerError::new(
+                StatusCode::FORBIDDEN,
+                "bad_origin",
+                "Cross-origin form submissions are not allowed.",
+            ));
+        }
+    }
+    let body = read_limited_payload(body).await?;
     let fields = codec::parse_form(&body);
     let text = fields
         .iter()

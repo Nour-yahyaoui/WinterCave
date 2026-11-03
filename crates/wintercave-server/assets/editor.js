@@ -84,6 +84,8 @@
   let saved = textarea.value;
   let timer = 0;
   let generation = 0;
+  let saveInFlight = false;
+  let saveQueued = false;
 
   function setStatus(text, tone) {
     if (!statusEl) return;
@@ -152,22 +154,39 @@
       setStatus('read only', 'warn');
       return;
     }
+    // Never let overlapping requests reach the server out of order. A second
+    // save keystroke while one is pending queues exactly one fresh snapshot.
+    if (saveInFlight) {
+      saveQueued = true;
+      return;
+    }
+
+    const snapshot = textarea.value;
+    saveInFlight = true;
     setStatus('saving…', 'dirty');
     try {
       const response = await fetch('/api/files?path=' + encodeURIComponent(path), {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text: textarea.value }),
+        body: JSON.stringify({ text: snapshot }),
       });
       if (!response.ok) {
         const problem = await response.json().catch(() => ({}));
         setStatus((problem.error && problem.error.message) || 'save failed', 'warn');
-        return;
+      } else {
+        // Only mark the bytes sent in this request as saved. If typing continued
+        // while it was in flight, refreshStatus leaves the new buffer dirty.
+        saved = snapshot;
+        refreshStatus();
       }
-      saved = textarea.value;
-      refreshStatus();
     } catch {
       setStatus('save failed', 'warn');
+    } finally {
+      saveInFlight = false;
+      if (saveQueued) {
+        saveQueued = false;
+        save();
+      }
     }
   }
 

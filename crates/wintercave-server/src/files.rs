@@ -129,12 +129,23 @@ impl FileService {
     /// Guard against symlinks that point outside the workspace: the deepest
     /// existing ancestor of the target must still be inside the real root.
     fn assert_contained(&self, absolute: &Path) -> Result<(), ServerError> {
-        let real_root = std::fs::canonicalize(&self.root).unwrap_or_else(|_| self.root.clone());
-        let mut probe = match absolute.parent() {
-            Some(parent) if !parent.as_os_str().is_empty() => parent.to_path_buf(),
-            _ => self.root.clone(),
-        };
+        let real_root = std::fs::canonicalize(&self.root)
+            .map_err(|error| ServerError::from_io(&error))?;
 
+        // Check the target itself first. Checking only its parent permits a final
+        // symlink to point outside the workspace (notably on reads).
+        if let Ok(real_target) = std::fs::canonicalize(absolute) {
+            if !paths::is_inside(&real_root, &real_target) {
+                return Err(ServerError::bad_path(
+                    "Path escapes the workspace through a link.",
+                ));
+            }
+            return Ok(());
+        }
+
+        // A new file may not exist yet. In that case validate the deepest
+        // existing ancestor; canonicalize follows symlinks in every component.
+        let mut probe = absolute.parent().unwrap_or(&self.root).to_path_buf();
         loop {
             match std::fs::canonicalize(&probe) {
                 Ok(real) => {
@@ -147,7 +158,11 @@ impl FileService {
                 }
                 Err(_) => match probe.parent() {
                     Some(parent) if parent != probe => probe = parent.to_path_buf(),
-                    _ => return Ok(()),
+                    _ => {
+                        return Err(ServerError::bad_path(
+                            "The workspace path could not be verified.",
+                        ));
+                    }
                 },
             }
         }
@@ -281,6 +296,7 @@ impl FileService {
         } else {
             paths::resolve_inside(&self.root, &normalized)?
         };
+        self.assert_contained(&directory)?;
 
         let read = std::fs::read_dir(&directory).map_err(|error| ServerError::from_io(&error))?;
         let mut entries = Vec::new();

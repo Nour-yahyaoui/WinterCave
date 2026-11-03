@@ -39,7 +39,7 @@
       <circle cx="16" cy="7" r="2" fill="currentColor"/>
     </svg>
     <span class="name">WinterCave</span>
-    <span class="ver">0.3.0</span>
+    <span class="ver">0.3.1</span>
   </a>
 
   <nav class="nav" aria-label="Sections">
@@ -82,7 +82,7 @@
     </svg>
 
     <div class="hero-copy">
-      <p class="eyebrow">Rust 0.3.0 · local · no npm</p>
+      <p class="eyebrow">Rust 0.3.1 · local · no npm</p>
       <h1 id="hero-title">A text editor you <em>run</em>,<br> not a service you join.</h1>
       <p class="lede">
         WinterCave is one Rust program. It serves the editor page, tokenizes the
@@ -181,7 +181,7 @@
     <div class="screen-grid">
       <div class="mock" id="mock" aria-label="Diagram of the WinterCave editor page" role="img">
         <div class="mock-side">
-          <div class="mock-brand">WinterCave<span>0.3.0</span></div>
+          <div class="mock-brand">WinterCave<span>0.3.1</span></div>
           <div class="mock-actions">
             <span class="mock-action">Open file…<kbd>⌘P</kbd></span>
             <span class="mock-action">Open folder…</span>
@@ -353,9 +353,9 @@
           <button type="button" class="copy" id="copy-run" data-copy="cargo run -p wintercave-server -- --port 4173 --root .">Copy</button>
         </div>
         <pre><code><span class="prompt">$</span> cargo run -p wintercave-server -- --port 4173 --root .
-<span class="dim">  wintercave-server 0.3.0</span>
+<span class="dim">  wintercave-server 0.3.1</span>
 <span class="dim">  root: /home/you/project</span>
-<span class="dim">  listening on http://0.0.0.0:4173</span></code></pre>
+<span class="dim">  listening on http://127.0.0.1:4173</span></code></pre>
       </div>
 
       <div class="run-notes">
@@ -367,12 +367,12 @@
         <ul class="ticks">
           <li><code>--root &lt;dir&gt;</code> the only folder it may touch</li>
           <li><code>--read-only</code> open files, refuse every write</li>
-          <li><code>--host 127.0.0.1</code> stay off the network entirely</li>
+          <li><code>--host 0.0.0.0</code> deliberately expose on your network</li>
         </ul>
         <p class="fine">
-          It binds <code>0.0.0.0</code> by default, like most dev servers. There
-          is no auth and no TLS, so pass <code>--host 127.0.0.1</code> on a
-          shared machine.
+          It binds to <code>127.0.0.1</code> by default. There is no auth or
+          TLS; use <code>--host 0.0.0.0</code> only when you deliberately want
+          trusted devices on your network to reach the editor.
         </p>
       </div>
     </div>
@@ -385,13 +385,13 @@
       <h2 id="limits-title">What it deliberately does not do</h2>
       <p class="sub">
         A tool is easier to trust when it says where the edges are. These are
-        the real ones, at 0.3.0.
+        the real ones, at 0.3.1.
       </p>
     </header>
 
     <div class="limits">
       <table>
-        <caption class="visually-hidden">Known limitations of WinterCave 0.3.0</caption>
+        <caption class="visually-hidden">Known limitations of WinterCave 0.3.1</caption>
         <thead>
           <tr><th scope="col">Limit</th><th scope="col">Why, and what to do</th></tr>
         </thead>
@@ -430,7 +430,7 @@
 <footer class="foot">
   <div class="foot-brand">
     <span class="wordmark-small">WinterCave</span>
-    <span class="ver">0.3.0</span>
+    <span class="ver">0.3.1</span>
   </div>
   <nav aria-label="Elsewhere">
     <a href="https://github.com/Nour-yahyaoui/WinterCave">Repository</a>

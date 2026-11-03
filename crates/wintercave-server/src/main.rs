@@ -14,7 +14,7 @@ use actix_web::{web, App, HttpServer};
 use wintercave_server::api::AppState;
 use wintercave_server::config::{self, ParseOutcome};
 use wintercave_server::files::{FileService, FileServiceOptions};
-use wintercave_server::{configure, paths, ServerError, BODY_LIMIT, SERVER_NAME};
+use wintercave_server::{configure, paths, ServerError, SERVER_NAME};
 
 fn to_io(error: ServerError) -> std::io::Error {
     std::io::Error::other(error)
@@ -62,7 +62,6 @@ async fn main() -> std::io::Result<()> {
     let server = HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(shared.clone()))
-            .app_data(web::PayloadConfig::new(BODY_LIMIT))
             .configure(configure)
     })
     .bind((settings.host.as_str(), settings.port))?;
